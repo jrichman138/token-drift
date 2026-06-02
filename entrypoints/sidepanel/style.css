@@ -1,0 +1,52 @@
+:root {
+  /* Type */
+  --font-body: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-display: 'Poppins', 'Inter', system-ui, sans-serif;
+
+  /* Palette — warm cream canvas with cool ocean-blue accents.
+     Warm/cool contrast; text & fill variants verified for WCAG AA. */
+  --bg: #ffffff; /* white canvas */
+  --fg: #14323a; /* dark teal ink — body text, 12.5:1 on cream */
+  --muted: #4f6a72; /* teal-gray — 5.3:1 on cream */
+  --line: #dbe4e8; /* cool gray-blue divider (decorative) */
+  --field: #5e848f; /* muted teal — 3.7:1 field borders (non-text) */
+  --surface: #eaf0f3; /* pale cool blue — chips, badges, secondary fills */
+  --accent: #1b607f; /* ocean blue — borders, focus, active (non-text) */
+  --accent-strong: #1b607f; /* ocean blue — accent text/links + button fills, 6.4:1 */
+  --accent-strong-hover: #154c56; /* deep teal — button hover, white-on-it 9.5:1 */
+
+  /* Verdict scale (data viz, kept as-is for the AA semantic spectrum) */
+  --good: #15803d;
+  --ok: #4d7c0f;
+  --warn: #b45309;
+  --bad: #dc2626;
+
+  /* Shape */
+  --radius: 10px;
+  --radius-sm: 8px;
+
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}

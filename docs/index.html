@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Token Drift — Privacy Policy</title>
+    <meta
+      name="description"
+      content="Privacy policy for the Token Drift Chrome extension. Token Drift runs entirely on your device and does not collect, store, or transmit personal data."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1a2230;
+        --muted: #5a6675;
+        --accent: #1b607f;
+        --line: #e2e6ea;
+        --bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e7ecf1;
+          --muted: #9aa6b3;
+          --accent: #7cc4e0;
+          --line: #2a323d;
+          --bg: #121821;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 20px 80px;
+      }
+      h1 {
+        font-size: 28px;
+        letter-spacing: -0.01em;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 8px;
+      }
+      .updated {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 24px;
+      }
+      a {
+        color: var(--accent);
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .lead {
+        font-size: 17px;
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Token Drift — Privacy Policy</h1>
+      <p class="updated">Last updated: June 1, 2026</p>
+
+      <p class="lead">
+        Token Drift is a browser extension that audits a web page's rendered styles against a
+        design-token system you provide. It is built to keep your data on your device. It does
+        not collect, store, sell, or transmit personal information, and it has no analytics,
+        trackers, cookies, or remote code.
+      </p>
+
+      <h2>What the extension does with data</h2>
+      <ul>
+        <li>
+          <strong>Page styles.</strong> When you click the Token Drift toolbar icon and run an
+          audit, the extension reads the computed CSS of the active tab (colors, spacing, font
+          properties, radii, shadows) to compare them against your tokens. This analysis happens
+          entirely in your browser. The page's content and styles are never sent to us or any
+          third party.
+        </li>
+        <li>
+          <strong>Your design tokens.</strong> Tokens you paste, upload, or load stay in the
+          extension's side panel in your browser. They are not uploaded anywhere.
+        </li>
+        <li>
+          <strong>Reports and exports.</strong> The audit report, and any JSON / Markdown /
+          clipboard exports you choose to generate, are produced locally and remain on your
+          device.
+        </li>
+      </ul>
+
+      <h2>Network requests</h2>
+      <p>
+        Token Drift makes a network request in exactly one case: when you choose the
+        <em>Repo URL</em> input and provide a link to a public token file. The extension fetches
+        that file directly from the host you named (for example, GitHub's
+        <code>raw.githubusercontent.com</code> or <code>gitlab.com</code>). That request contains
+        only the URL you entered. It is governed by the privacy policy of GitHub or GitLab,
+        respectively. The extension makes no other network requests.
+      </p>
+
+      <h2>Permissions and why they are used</h2>
+      <ul>
+        <li>
+          <strong>activeTab</strong> and <strong>scripting</strong> — to read the styles of the
+          tab you are auditing, only after you explicitly invoke the extension. The extension does
+          not run on pages you have not asked it to audit.
+        </li>
+        <li>
+          <strong>sidePanel</strong> — to show the audit interface and report.
+        </li>
+        <li>
+          <strong>Host access to <code>raw.githubusercontent.com</code> and
+          <code>gitlab.com</code></strong> — solely to fetch a public token file when you use the
+          Repo URL option. This access is not used to read web pages.
+        </li>
+      </ul>
+
+      <h2>Data retention and sharing</h2>
+      <p>
+        Token Drift stores no personal data and shares no data with anyone. There is no server,
+        no account, and no third-party data processor.
+      </p>
+
+      <h2>Children's privacy</h2>
+      <p>
+        Token Drift is a developer/designer tool and is not directed at children. It collects no
+        personal information from anyone.
+      </p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        If this policy changes, the updated version will be posted at this URL with a revised
+        "Last updated" date.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about this policy can be sent to
+        <a href="mailto:jrichman138@gmail.com">jrichman138@gmail.com</a>.
+      </p>
+
+      <footer>Token Drift is an open project. This page is the canonical privacy policy.</footer>
+    </main>
+  </body>
+</html>
