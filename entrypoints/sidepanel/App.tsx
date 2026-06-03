@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type AuditResult, aggregate } from '@/lib/audit/aggregate';
-import { AUDIT_REQUEST, type AuditResponse } from '@/lib/messaging';
+import { AUDIT_REQUEST, type AuditResponse, CLEAR_HIGHLIGHT } from '@/lib/messaging';
 import { fetchRepoTokens } from '@/lib/tokens/fetch-tokens';
 import { parseJsonTokens } from '@/lib/tokens/parse-json';
 import { parseMarkdownTokens } from '@/lib/tokens/parse-markdown';
@@ -21,6 +21,10 @@ interface AuditState {
   warnings: string[];
   notices: string[];
   url: string;
+  // The tab this audit ran against. The side panel is window-global, so we use
+  // this to discard the report when the user switches to (or navigates) a
+  // different tab — otherwise stale results bleed across pages.
+  tabId: number;
 }
 
 function parseText(text: string, format: TokenFileFormat): ParseResult {
@@ -46,9 +50,10 @@ async function loadTokens(
   return parseText(pasted, sniffFormat(pasted));
 }
 
-async function requestObservations(): Promise<AuditResponse> {
+async function requestObservations(): Promise<{ response: AuditResponse; tabId: number | null }> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return { ok: false, error: 'No active tab to audit.' };
+  if (!tab?.id) return { response: { ok: false, error: 'No active tab to audit.' }, tabId: null };
+  const tabId = tab.id;
 
   // On-demand injection: the content script is not in the manifest, so we push
   // it into the active tab here. This needs the activeTab grant, which we get
@@ -56,22 +61,32 @@ async function requestObservations(): Promise<AuditResponse> {
   // safe — the script guards itself with `window.__tokenDriftReady`.
   try {
     await browser.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId },
       files: ['/content-scripts/content.js'],
     });
-  } catch {
+  } catch (e) {
+    console.error('Token Drift: executeScript injection failed', e);
     return {
-      ok: false,
-      error:
-        'Can’t audit this page. Open the page you want to check, click the Token Drift ' +
-        'toolbar icon there, then run again. (Chrome system pages and the Web Store are off-limits.)',
+      response: {
+        ok: false,
+        error:
+          'Can’t audit this page. Open the page you want to check, click the Token Drift ' +
+          'toolbar icon there, then run again. (Chrome system pages and the Web Store are off-limits.)',
+      },
+      tabId,
     };
   }
 
   try {
-    return (await browser.tabs.sendMessage(tab.id, AUDIT_REQUEST)) as AuditResponse;
+    return {
+      response: (await browser.tabs.sendMessage(tabId, AUDIT_REQUEST)) as AuditResponse,
+      tabId,
+    };
   } catch {
-    return { ok: false, error: 'Could not reach the page. Reload the tab, then try again.' };
+    return {
+      response: { ok: false, error: 'Could not reach the page. Reload the tab, then try again.' },
+      tabId,
+    };
   }
 }
 
@@ -86,6 +101,52 @@ function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Mirrors the audited tab id for the tab listeners below (kept in a ref so the
+  // listeners can read the latest value without re-subscribing on every audit).
+  const auditedTabIdRef = useRef<number | null>(null);
+
+  // A report describes one specific page, but the side panel is shared across
+  // every tab in the window. Discard the report when the user switches to a
+  // different tab, or when the audited tab navigates — so results never linger
+  // on a page they didn't come from. Best-effort clear any on-page highlights too.
+  useEffect(() => {
+    function discard() {
+      const stale = auditedTabIdRef.current;
+      auditedTabIdRef.current = null;
+      setAudit(null);
+      setError(null);
+      setCollapsed(false);
+      if (stale != null && stale >= 0) {
+        void browser.tabs.sendMessage(stale, CLEAR_HIGHLIGHT).catch(() => {});
+      }
+    }
+
+    function onActivated(info: { tabId: number }) {
+      if (auditedTabIdRef.current != null && info.tabId !== auditedTabIdRef.current) {
+        discard();
+      }
+    }
+
+    function onUpdated(
+      tabId: number,
+      changeInfo: { url?: string; status?: string },
+    ) {
+      // The audited tab reloaded or navigated — its sampled styles are gone.
+      if (
+        tabId === auditedTabIdRef.current &&
+        (changeInfo.url != null || changeInfo.status === 'loading')
+      ) {
+        discard();
+      }
+    }
+
+    browser.tabs.onActivated.addListener(onActivated);
+    browser.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      browser.tabs.onActivated.removeListener(onActivated);
+      browser.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, []);
 
   // After a run the input collapses to just its tabs; clicking a tab re-opens it.
   function selectMode(next: InputMode) {
@@ -124,16 +185,18 @@ function App() {
     setError(null);
     try {
       const parsed = await loadTokens(mode, pasted, upload, repoUrl);
-      const page = await requestObservations();
+      const { response: page, tabId } = await requestObservations();
       if (!page.ok) {
         setError(page.error);
         return;
       }
+      auditedTabIdRef.current = tabId;
       setAudit({
         result: aggregate(page.observations, parsed.tokens),
         warnings: parsed.warnings,
         notices: page.notices ?? [],
         url: page.url,
+        tabId: tabId ?? -1,
       });
       setCollapsed(true);
     } catch (err) {
