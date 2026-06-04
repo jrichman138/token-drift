@@ -1,0 +1,25 @@
+{
+  "name": "token-drift-figma",
+  "description": "Figma plugin: audit a file's layers against its own variables and color styles.",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "compile": "tsc --noEmit"
+  },
+  "dependencies": {
+    "culori": "^4.0.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "@types/culori": "^4.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.3"
+  }
+}
