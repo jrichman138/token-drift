@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ColorAuditResult, DriftGroup } from '../figma/audit';
 import type { DimAuditResult, DimDriftGroup } from '../figma/dimension';
+import type { EffectAuditResult, EffectDriftGroup } from '../figma/effect';
 import type { TypeAuditResult, TypeDriftGroup } from '../figma/text';
 import type { PluginMessage, UIMessage } from '../shared/messaging';
 
@@ -10,6 +11,7 @@ interface ResultState {
   typography: TypeAuditResult;
   spacing: DimAuditResult;
   radius: DimAuditResult;
+  elevation: EffectAuditResult;
   scope: string;
   nodeCount: number;
   colorTokenCount: number;
@@ -78,6 +80,7 @@ function App() {
           typography: msg.typography,
           spacing: msg.spacing,
           radius: msg.radius,
+          elevation: msg.elevation,
           scope: msg.scope,
           nodeCount: msg.nodeCount,
           colorTokenCount: msg.colorTokenCount,
@@ -90,7 +93,8 @@ function App() {
         msg.type === 'rebind-done' ||
         msg.type === 'apply-style-done' ||
         msg.type === 'replace-font-done' ||
-        msg.type === 'bind-dimension-done'
+        msg.type === 'bind-dimension-done' ||
+        msg.type === 'apply-effect-style-done'
       ) {
         const fb =
           msg.type === 'replace-font-done' && msg.fallbacks > 0
@@ -140,6 +144,12 @@ function App() {
     if (!g.suggestionVariableId) return;
     setWorking(g.key);
     send({ type: 'bind-dimension', variableId: g.suggestionVariableId, refs: g.refs });
+  }
+
+  function applyEffectStyle(g: EffectDriftGroup) {
+    if (!g.styleId) return;
+    setWorking(g.key);
+    send({ type: 'apply-effect-style', styleId: g.styleId, nodeIds: g.nodeIds });
   }
 
   return (
@@ -197,6 +207,13 @@ function App() {
             working={working}
             onLocate={locate}
             onUse={bindDimension}
+          />
+
+          <ElevationSection
+            result={data.elevation}
+            working={working}
+            onLocate={locate}
+            onUse={applyEffectStyle}
           />
         </>
       )}
@@ -455,6 +472,71 @@ function DimSection({
                     {canUse && (
                       <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
                         {isWorking ? 'Applying…' : `Use ${g.suggestionName}`}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ElevationSection({
+  result,
+  working,
+  onLocate,
+  onUse,
+}: {
+  result: EffectAuditResult;
+  working: string | null;
+  onLocate: (ids: string[]) => void;
+  onUse: (g: EffectDriftGroup) => void;
+}) {
+  const t = result.totals;
+  return (
+    <section className="section">
+      <SectionHead title="Elevation" coherence={result.coherence} drift={result.driftGroups.length} />
+      {result.styleTokenCount === 0 ? (
+        <p className="note">No effect styles found in this file.</p>
+      ) : (
+        <div className="totals">
+          <Stat label="On token" value={t.onToken} />
+          <Stat label="Detached" value={t.detached} />
+          <Stat label="Off-system" value={t.off} />
+        </div>
+      )}
+      {result.driftGroups.length === 0 ? (
+        <p className="empty">No elevation drift.</p>
+      ) : (
+        <ul className="vlist">
+          {result.driftGroups.map((g) => {
+            const canUse = !!g.styleId;
+            const isWorking = working === g.key;
+            const variant = g.status === 'detached' ? 'detached' : 'orphan';
+            return (
+              <li key={g.key} className={`violation v--${variant}`}>
+                <div className="vrow">
+                  <span className="vvalue">{g.label}</span>
+                  <span className="vcount">×{g.instanceCount}</span>
+                  <span className={`chip chip--${variant}`}>
+                    {g.status === 'detached' ? 'Detached' : 'Off-system'}
+                  </span>
+                </div>
+                <div className="vmeta">
+                  <span className="vsuggest vsuggest--none">
+                    {g.status === 'detached' ? 'exact match — applying changes nothing' : 'no matching effect style'}
+                  </span>
+                  <span className="vactions">
+                    <button className="locate" onClick={() => onLocate(g.nodeIds)}>
+                      Locate
+                    </button>
+                    {canUse && (
+                      <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
+                        {isWorking ? 'Applying…' : `Use ${g.styleName}`}
                       </button>
                     )}
                   </span>

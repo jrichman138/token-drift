@@ -12,6 +12,7 @@ import {
   extractDimensions,
   type DimRef,
 } from '../figma/dimension';
+import { auditEffects, collectEffectStyleTokens, extractEffects } from '../figma/effect';
 import { extractObservations, type PaintProperty } from '../figma/extract';
 import { collectTokens } from '../figma/tokens';
 import { auditTypography, collectTextStyleTokens, extractText } from '../figma/text';
@@ -55,12 +56,18 @@ async function runAudit(): Promise<void> {
   const dimTokens = await collectDimensionTokens(dimEx.boundVariableIds);
   const { spacing, radius } = auditDimensions(dimEx.observations, dimTokens);
 
+  // Elevation (effects).
+  const effEx = extractEffects(roots);
+  const effTokens = await collectEffectStyleTokens(effEx.referencedStyleIds);
+  const elevation = auditEffects(effEx.observations, effTokens);
+
   post({
     type: 'audit-result',
     color,
     typography,
     spacing,
     radius,
+    elevation,
     scope,
     nodeCount: colorEx.nodeCount,
     colorTokenCount,
@@ -256,6 +263,32 @@ async function bindDimension(variableId: string, refs: DimRef[]): Promise<void> 
   post({ type: 'bind-dimension-done', fixed, failed });
 }
 
+// ---- elevation fix: apply an effect style ----------------------------------
+
+async function applyEffectStyle(styleId: string, nodeIds: string[]): Promise<void> {
+  const style = await figma.getStyleByIdAsync(styleId);
+  if (!style || style.type !== 'EFFECT') {
+    post({ type: 'apply-effect-style-done', fixed: 0, failed: nodeIds.length });
+    return;
+  }
+  let fixed = 0;
+  let failed = 0;
+  for (const id of [...new Set(nodeIds)]) {
+    const node = await figma.getNodeByIdAsync(id);
+    if (!node || !('setEffectStyleIdAsync' in node)) {
+      failed += 1;
+      continue;
+    }
+    try {
+      await (node as unknown as { setEffectStyleIdAsync: (id: string) => Promise<void> }).setEffectStyleIdAsync(styleId);
+      fixed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  post({ type: 'apply-effect-style-done', fixed, failed });
+}
+
 figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
   try {
     if (message.type === 'run-audit') await runAudit();
@@ -264,6 +297,7 @@ figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
     else if (message.type === 'apply-style') await applyStyle(message.styleId, message.nodeIds);
     else if (message.type === 'replace-font') await replaceFont(message.family, message.nodeIds);
     else if (message.type === 'bind-dimension') await bindDimension(message.variableId, message.refs);
+    else if (message.type === 'apply-effect-style') await applyEffectStyle(message.styleId, message.nodeIds);
   } catch (error) {
     post({ type: 'audit-error', error: error instanceof Error ? error.message : String(error) });
   }
