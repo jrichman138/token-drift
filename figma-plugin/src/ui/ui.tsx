@@ -3,8 +3,11 @@ import { createRoot } from 'react-dom/client';
 import type { ColorAuditResult, DriftGroup } from '../figma/audit';
 import type { DimAuditResult, DimDriftGroup } from '../figma/dimension';
 import type { EffectAuditResult, EffectDriftGroup } from '../figma/effect';
+import type { ScaleOutlier, ScaleResult, ScaleResults } from '../figma/scale';
 import type { TypeAuditResult, TypeDriftGroup } from '../figma/text';
 import type { PluginMessage, UIMessage } from '../shared/messaging';
+
+type Mode = 'tokens' | 'consistency';
 
 interface ResultState {
   color: ColorAuditResult;
@@ -13,6 +16,7 @@ interface ResultState {
   radius: DimAuditResult;
   stroke: DimAuditResult;
   elevation: EffectAuditResult;
+  scale: ScaleResults;
   scope: string;
   nodeCount: number;
   colorTokenCount: number;
@@ -60,6 +64,7 @@ function App() {
   const [data, setData] = useState<ResultState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null); // key of the group being fixed
+  const [mode, setMode] = useState<Mode>('tokens');
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -83,6 +88,7 @@ function App() {
           radius: msg.radius,
           stroke: msg.stroke,
           elevation: msg.elevation,
+          scale: msg.scale,
           scope: msg.scope,
           nodeCount: msg.nodeCount,
           colorTokenCount: msg.colorTokenCount,
@@ -96,7 +102,8 @@ function App() {
         msg.type === 'apply-style-done' ||
         msg.type === 'replace-font-done' ||
         msg.type === 'bind-dimension-done' ||
-        msg.type === 'apply-effect-style-done'
+        msg.type === 'apply-effect-style-done' ||
+        msg.type === 'normalize-dimension-done'
       ) {
         const fb =
           msg.type === 'replace-font-done' && msg.fallbacks > 0
@@ -154,6 +161,11 @@ function App() {
     send({ type: 'apply-effect-style', styleId: g.styleId, nodeIds: g.nodeIds });
   }
 
+  function normalize(category: string, o: ScaleOutlier) {
+    setWorking(`${category}:${o.value}`);
+    send({ type: 'normalize-dimension', value: o.suggest, refs: o.refs });
+  }
+
   return (
     <div className="app">
       <header className="head">
@@ -179,52 +191,59 @@ function App() {
             {data.truncated ? ' (truncated)' : ''}
           </p>
 
-          <ColorSection
-            result={data.color}
-            tokenCount={data.colorTokenCount}
-            working={working}
-            onLocate={locate}
-            onUse={useColorToken}
-          />
+          <div className="modes" role="tablist">
+            <button
+              role="tab"
+              aria-selected={mode === 'tokens'}
+              className={mode === 'tokens' ? 'is-active' : ''}
+              onClick={() => setMode('tokens')}
+            >
+              Tokens
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === 'consistency'}
+              className={mode === 'consistency' ? 'is-active' : ''}
+              onClick={() => setMode('consistency')}
+            >
+              Consistency
+            </button>
+          </div>
 
-          <TypeSection
-            result={data.typography}
-            working={working}
-            onLocate={locate}
-            onUse={useTextStyle}
-            onReplaceFont={replaceFont}
-          />
+          {mode === 'tokens' && (
+            <>
+              <ColorSection
+                result={data.color}
+                tokenCount={data.colorTokenCount}
+                working={working}
+                onLocate={locate}
+                onUse={useColorToken}
+              />
+              <TypeSection
+                result={data.typography}
+                working={working}
+                onLocate={locate}
+                onUse={useTextStyle}
+                onReplaceFont={replaceFont}
+              />
+              <DimSection title="Spacing" result={data.spacing} working={working} onLocate={locate} onUse={bindDimension} />
+              <DimSection title="Radius" result={data.radius} working={working} onLocate={locate} onUse={bindDimension} />
+              <DimSection title="Stroke" result={data.stroke} working={working} onLocate={locate} onUse={bindDimension} />
+              <ElevationSection result={data.elevation} working={working} onLocate={locate} onUse={applyEffectStyle} />
+            </>
+          )}
 
-          <DimSection
-            title="Spacing"
-            result={data.spacing}
-            working={working}
-            onLocate={locate}
-            onUse={bindDimension}
-          />
-
-          <DimSection
-            title="Radius"
-            result={data.radius}
-            working={working}
-            onLocate={locate}
-            onUse={bindDimension}
-          />
-
-          <DimSection
-            title="Stroke"
-            result={data.stroke}
-            working={working}
-            onLocate={locate}
-            onUse={bindDimension}
-          />
-
-          <ElevationSection
-            result={data.elevation}
-            working={working}
-            onLocate={locate}
-            onUse={applyEffectStyle}
-          />
+          {mode === 'consistency' && (
+            <>
+              <p className="hint">
+                Outliers found without tokens — values that look like accidental deviations
+                from your de-facto scale. “Set to N” changes the value (a small visual edit).
+              </p>
+              <ScaleSection title="Spacing" result={data.scale.spacing} working={working} onLocate={locate} onNormalize={normalize} />
+              <ScaleSection title="Radius" result={data.scale.radius} working={working} onLocate={locate} onNormalize={normalize} />
+              <ScaleSection title="Stroke" result={data.scale.stroke} working={working} onLocate={locate} onNormalize={normalize} />
+            </>
+          )}
         </>
       )}
 
@@ -555,6 +574,82 @@ function ElevationSection({
             );
           })}
         </ul>
+      )}
+    </section>
+  );
+}
+
+function ScaleSection({
+  title,
+  result,
+  working,
+  onLocate,
+  onNormalize,
+}: {
+  title: string;
+  result: ScaleResult;
+  working: string | null;
+  onLocate: (ids: string[]) => void;
+  onNormalize: (category: string, o: ScaleOutlier) => void;
+}) {
+  return (
+    <section className="section">
+      <div className="shead">
+        <span className="shead__title">{title}</span>
+        <span className="shead__drift">
+          {result.distinctCount} value{result.distinctCount === 1 ? '' : 's'} · {result.outliers.length} outlier
+          {result.outliers.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {result.total === 0 ? (
+        <p className="empty">No raw {title.toLowerCase()} values.</p>
+      ) : (
+        <>
+          <div className="scalebar">
+            {result.scale.map((s) => (
+              <span key={s.value} className="scalechip">
+                {s.value}
+                <em>×{s.count}</em>
+              </span>
+            ))}
+          </div>
+          {result.outliers.length > 0 && (
+            <ul className="vlist">
+              {result.outliers.map((o) => {
+                const isWorking = working === `${result.category}:${o.value}`;
+                return (
+                  <li key={o.value} className="violation v--orphan">
+                    <div className="vrow">
+                      <span className="vvalue">{o.value}px</span>
+                      <span className="vcount">×{o.count}</span>
+                      <span className="chip chip--orphan">Outlier</span>
+                    </div>
+                    <div className="vmeta">
+                      <span className="vsuggest">
+                        near {o.suggest}px (×{o.suggestCount})
+                      </span>
+                      <span className="vactions">
+                        <button
+                          className="locate"
+                          onClick={() => onLocate([...new Set(o.refs.map((r) => r.nodeId))])}
+                        >
+                          Locate
+                        </button>
+                        <button
+                          className="bind"
+                          onClick={() => onNormalize(result.category, o)}
+                          disabled={isWorking}
+                        >
+                          {isWorking ? 'Applying…' : `Set to ${o.suggest}`}
+                        </button>
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );

@@ -75,6 +75,20 @@ function htmlTemplate(js) {
   .verdict__label { font-weight: 600; }
   .verdict__scope { color: var(--text-secondary); margin-top: 2px; }
   .context { margin: 0; }
+  .modes {
+    display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-secondary);
+  }
+  .modes button {
+    flex: 1; appearance: none; border: 0; border-radius: 6px; padding: 6px 10px;
+    background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .modes button.is-active { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .scalebar { display: flex; flex-wrap: wrap; gap: 4px; }
+  .scalechip {
+    display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 8px; border-radius: 6px;
+    background: var(--bg-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  }
+  .scalechip em { color: var(--text-secondary); font-style: normal; }
   .section { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
   .shead { display: flex; align-items: baseline; gap: 8px; }
   .shead__title { font-size: 13px; font-weight: 600; }

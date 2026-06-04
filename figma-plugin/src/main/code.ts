@@ -13,6 +13,7 @@ import {
   type DimRef,
 } from '../figma/dimension';
 import { auditEffects, collectEffectStyleTokens, extractEffects } from '../figma/effect';
+import { analyzeScales } from '../figma/scale';
 import { extractObservations, type PaintProperty } from '../figma/extract';
 import { collectTokens } from '../figma/tokens';
 import { auditTypography, collectTextStyleTokens, extractText } from '../figma/text';
@@ -55,6 +56,8 @@ async function runAudit(): Promise<void> {
   const dimEx = extractDimensions(roots);
   const dimTokens = await collectDimensionTokens(dimEx.boundVariableIds);
   const { spacing, radius, stroke } = auditDimensions(dimEx.observations, dimTokens);
+  // Token-free scale-consistency analysis (reuses the dimension observations).
+  const scale = analyzeScales(dimEx.observations);
 
   // Elevation (effects).
   const effEx = extractEffects(roots);
@@ -69,6 +72,7 @@ async function runAudit(): Promise<void> {
     radius,
     stroke,
     elevation,
+    scale,
     scope,
     nodeCount: colorEx.nodeCount,
     colorTokenCount,
@@ -290,6 +294,27 @@ async function applyEffectStyle(styleId: string, nodeIds: string[]): Promise<voi
   post({ type: 'apply-effect-style-done', fixed, failed });
 }
 
+// ---- scale fix: normalize a raw number to a canonical value ----------------
+
+async function normalizeDimension(value: number, refs: DimRef[]): Promise<void> {
+  let fixed = 0;
+  let failed = 0;
+  for (const ref of refs) {
+    const node = await figma.getNodeByIdAsync(ref.nodeId);
+    if (!node || !(ref.field in node)) {
+      failed += 1;
+      continue;
+    }
+    try {
+      (node as unknown as Record<string, number>)[ref.field] = value;
+      fixed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  post({ type: 'normalize-dimension-done', fixed, failed });
+}
+
 figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
   try {
     if (message.type === 'run-audit') await runAudit();
@@ -299,6 +324,7 @@ figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
     else if (message.type === 'replace-font') await replaceFont(message.family, message.nodeIds);
     else if (message.type === 'bind-dimension') await bindDimension(message.variableId, message.refs);
     else if (message.type === 'apply-effect-style') await applyEffectStyle(message.styleId, message.nodeIds);
+    else if (message.type === 'normalize-dimension') await normalizeDimension(message.value, message.refs);
   } catch (error) {
     post({ type: 'audit-error', error: error instanceof Error ? error.message : String(error) });
   }

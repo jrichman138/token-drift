@@ -4,6 +4,7 @@
 import type { ColorAuditResult, NodeRef } from '../figma/audit';
 import type { DimAuditResult, DimRef } from '../figma/dimension';
 import type { EffectAuditResult } from '../figma/effect';
+import type { ScaleResults } from '../figma/scale';
 import type { TypeAuditResult } from '../figma/text';
 
 // UI -> sandbox.
@@ -14,7 +15,8 @@ export type UIMessage =
   | { type: 'apply-style'; styleId: string; nodeIds: string[] } // type: apply a text style
   | { type: 'replace-font'; family: string; nodeIds: string[] } // type: swap only the font family
   | { type: 'bind-dimension'; variableId: string; refs: DimRef[] } // spacing/radius: bind to a variable
-  | { type: 'apply-effect-style'; styleId: string; nodeIds: string[] }; // elevation: apply an effect style
+  | { type: 'apply-effect-style'; styleId: string; nodeIds: string[] } // elevation: apply an effect style
+  | { type: 'normalize-dimension'; value: number; refs: DimRef[] }; // scale: set these fields to a value
 
 // sandbox -> UI.
 export type PluginMessage =
@@ -26,6 +28,7 @@ export type PluginMessage =
       radius: DimAuditResult;
       stroke: DimAuditResult;
       elevation: EffectAuditResult;
+      scale: ScaleResults; // token-free scale-consistency analysis
       scope: string; // "Selection (3 layers)" or "Page: Home"
       nodeCount: number;
       colorTokenCount: number;
@@ -40,4 +43,5 @@ export type PluginMessage =
   // and we substituted the closest available one.
   | { type: 'replace-font-done'; fixed: number; failed: number; fallbacks: number }
   | { type: 'bind-dimension-done'; fixed: number; failed: number }
-  | { type: 'apply-effect-style-done'; fixed: number; failed: number };
+  | { type: 'apply-effect-style-done'; fixed: number; failed: number }
+  | { type: 'normalize-dimension-done'; fixed: number; failed: number };
