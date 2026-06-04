@@ -2,24 +2,28 @@
 // UI iframe (ui/ui.tsx).
 
 import type { ColorAuditResult, NodeRef } from '../figma/audit';
+import type { TypeAuditResult } from '../figma/text';
 
 // UI -> sandbox.
 export type UIMessage =
   | { type: 'run-audit' }
-  | { type: 'locate'; refs: NodeRef[] } // select + zoom to these nodes on canvas
-  | { type: 'rebind'; variableId: string; refs: NodeRef[] }; // bind these paints to a variable
+  | { type: 'locate'; nodeIds: string[] } // select + zoom to these nodes
+  | { type: 'rebind'; variableId: string; refs: NodeRef[] } // color: bind paints to a variable
+  | { type: 'apply-style'; styleId: string; nodeIds: string[] }; // type: apply a text style
 
 // sandbox -> UI.
 export type PluginMessage =
   | {
       type: 'audit-result';
-      result: ColorAuditResult;
+      color: ColorAuditResult;
+      typography: TypeAuditResult;
       scope: string; // "Selection (3 layers)" or "Page: Home"
       nodeCount: number;
-      tokenCount: number;
+      colorTokenCount: number;
       truncated: boolean;
       warnings: string[];
     }
   | { type: 'audit-error'; error: string }
   | { type: 'locate-done'; found: number }
-  | { type: 'rebind-done'; fixed: number; failed: number };
+  | { type: 'rebind-done'; fixed: number; failed: number }
+  | { type: 'apply-style-done'; fixed: number; failed: number };

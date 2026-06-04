@@ -75,6 +75,15 @@ function htmlTemplate(js) {
   .verdict__label { font-weight: 600; }
   .verdict__scope { color: var(--text-secondary); margin-top: 2px; }
   .context { margin: 0; }
+  .section { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
+  .shead { display: flex; align-items: baseline; gap: 8px; }
+  .shead__title { font-size: 13px; font-weight: 600; }
+  .shead__score { font-size: 13px; font-weight: 700; }
+  .shead--good .shead__score { color: var(--good); }
+  .shead--ok .shead__score { color: var(--ok); }
+  .shead--warn .shead__score { color: var(--warn); }
+  .shead--bad .shead__score { color: var(--bad); }
+  .shead__drift { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
   .note {
     margin: 0; padding: 8px 10px; border-radius: 6px; line-height: 1.4;
     background: rgba(217, 154, 43, 0.12); color: var(--warn);
@@ -102,6 +111,9 @@ function htmlTemplate(js) {
   .v--detached { border-left-color: var(--warn); }
   .v--near { border-left-color: var(--ok); }
   .v--orphan { border-left-color: var(--bad); }
+  .v--close { border-left-color: var(--ok); }
+  .v--off { border-left-color: var(--bad); }
+  .v--mixed { border-left-color: var(--text-secondary); }
   .vrow { display: flex; align-items: center; gap: 8px; }
   .swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); flex: 0 0 auto; }
   .vvalue { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
@@ -113,6 +125,9 @@ function htmlTemplate(js) {
   .chip--detached { background: rgba(217, 154, 43, 0.16); color: var(--warn); }
   .chip--near { background: rgba(123, 168, 67, 0.16); color: var(--ok); }
   .chip--orphan { background: rgba(209, 73, 91, 0.16); color: var(--bad); }
+  .chip--close { background: rgba(123, 168, 67, 0.16); color: var(--ok); }
+  .chip--off { background: rgba(209, 73, 91, 0.16); color: var(--bad); }
+  .chip--mixed { background: rgba(120, 120, 120, 0.16); color: var(--text-secondary); }
   .vmeta { display: flex; align-items: center; gap: 8px; }
   .vsuggest { color: var(--text-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
   .vsuggest--none { font-style: italic; font-family: inherit; }

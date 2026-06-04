@@ -1,13 +1,15 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ColorAuditResult, DriftGroup, DriftStatus } from '../figma/audit';
+import type { ColorAuditResult, DriftGroup } from '../figma/audit';
+import type { TypeAuditResult, TypeDriftGroup } from '../figma/text';
 import type { PluginMessage, UIMessage } from '../shared/messaging';
 
 interface ResultState {
-  result: ColorAuditResult;
+  color: ColorAuditResult;
+  typography: TypeAuditResult;
   scope: string;
   nodeCount: number;
-  tokenCount: number;
+  colorTokenCount: number;
   truncated: boolean;
   warnings: string[];
 }
@@ -19,18 +21,31 @@ function tone(coherence: number): string {
   return 'bad';
 }
 
-const STATUS_LABEL: Record<DriftStatus, string> = {
+const COLOR_STATUS_LABEL: Record<DriftGroup['status'], string> = {
   detached: 'Detached',
   near: 'Near token',
   orphan: 'Off-system',
+};
+const TYPE_STATUS_LABEL: Record<TypeDriftGroup['status'], string> = {
+  detached: 'Detached',
+  close: 'Close',
+  off: 'No style',
+  mixed: 'Mixed',
+};
+
+const TYPE_STATUS_HINT: Record<TypeDriftGroup['status'], string> = {
+  detached: 'exact match — applying changes nothing',
+  close: 'snaps line-height / letter-spacing',
+  off: 'no matching text style',
+  mixed: 'multiple fonts in one layer',
 };
 
 function send(message: UIMessage): void {
   parent.postMessage({ pluginMessage: message }, '*');
 }
 
-function groupKey(g: DriftGroup): string {
-  return `${g.status} ${g.value}`;
+function colorKey(g: DriftGroup): string {
+  return `c:${g.status}:${g.value}`;
 }
 
 function App() {
@@ -38,8 +53,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ResultState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  // value-key of the group currently being rebound, for a per-row spinner.
-  const [binding, setBinding] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null); // key of the group being fixed
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -48,34 +62,34 @@ function App() {
 
       if (msg.type === 'audit-error') {
         setBusy(false);
-        setBinding(null);
+        setWorking(null);
         setError(msg.error);
         return;
       }
       if (msg.type === 'audit-result') {
         setBusy(false);
-        setBinding(null);
+        setWorking(null);
         setError(null);
         setData({
-          result: msg.result,
+          color: msg.color,
+          typography: msg.typography,
           scope: msg.scope,
           nodeCount: msg.nodeCount,
-          tokenCount: msg.tokenCount,
+          colorTokenCount: msg.colorTokenCount,
           truncated: msg.truncated,
           warnings: msg.warnings,
         });
         return;
       }
-      if (msg.type === 'rebind-done') {
+      if (msg.type === 'rebind-done' || msg.type === 'apply-style-done') {
         const note =
           msg.failed > 0
-            ? `${msg.fixed} now use the token, ${msg.failed} skipped. Re-auditing…`
-            : `${msg.fixed} now use the token. Re-auditing…`;
+            ? `${msg.fixed} fixed, ${msg.failed} skipped. Re-auditing…`
+            : `${msg.fixed} fixed. Re-auditing…`;
         setToast(note);
         window.setTimeout(() => setToast(null), 2200);
-        send({ type: 'run-audit' }); // refresh so the list reflects the fix
+        send({ type: 'run-audit' });
       }
-      // locate-done: nothing to render.
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -87,24 +101,27 @@ function App() {
     send({ type: 'run-audit' });
   }
 
-  function locate(g: DriftGroup) {
-    send({ type: 'locate', refs: g.refs });
+  function locate(nodeIds: string[]) {
+    send({ type: 'locate', nodeIds });
   }
 
-  function bind(g: DriftGroup) {
+  function useColorToken(g: DriftGroup) {
     if (!g.suggestionVariableId) return;
-    setBinding(groupKey(g));
+    setWorking(colorKey(g));
     send({ type: 'rebind', variableId: g.suggestionVariableId, refs: g.refs });
   }
 
-  const result = data?.result;
-  const t = result?.totals;
+  function useTextStyle(g: TypeDriftGroup) {
+    if (!g.styleId) return;
+    setWorking(g.key);
+    send({ type: 'apply-style', styleId: g.styleId, nodeIds: g.nodeIds });
+  }
 
   return (
     <div className="app">
       <header className="head">
         <h1>Token Drift</h1>
-        <p className="sub">Audit colors against this file’s variables — and fix drift in place.</p>
+        <p className="sub">Audit color &amp; type against this file’s tokens — and fix drift in place.</p>
       </header>
 
       <button className="run" onClick={run} disabled={busy}>
@@ -118,86 +135,27 @@ function App() {
       )}
       {toast && <p className="toast">{toast}</p>}
 
-      {data && result && t && (
+      {data && (
         <>
-          <section className={`verdict verdict--${tone(result.coherence)}`}>
-            <div className="score">{Math.round(result.coherence * 100)}%</div>
-            <div className="verdict__meta">
-              <div className="verdict__label">{t.bound} of {t.total} using a token</div>
-              <div className="verdict__scope">{data.scope}</div>
-            </div>
-          </section>
-
           <p className="context">
-            {data.tokenCount} color token{data.tokenCount === 1 ? '' : 's'} · {data.nodeCount} node
-            {data.nodeCount === 1 ? '' : 's'} scanned{data.truncated ? ' (truncated)' : ''}
+            {data.scope} · {data.nodeCount} node{data.nodeCount === 1 ? '' : 's'}
+            {data.truncated ? ' (truncated)' : ''}
           </p>
 
-          {data.tokenCount === 0 && (
-            <p className="note">
-              No color variables found (locally or bound on the canvas), so nothing can be bound.
-              Open a file whose layers use color variables.
-            </p>
-          )}
+          <ColorSection
+            result={data.color}
+            tokenCount={data.colorTokenCount}
+            working={working}
+            onLocate={locate}
+            onUse={useColorToken}
+          />
 
-          <div className="totals">
-            <Stat label="On token" value={t.bound} />
-            <Stat label="Detached" value={t.detached} />
-            <Stat label="Near" value={t.near} />
-            <Stat label="Off-system" value={t.orphan} />
-          </div>
-
-          <section className="violations">
-            <h2>
-              Drifting colors <span className="count">{result.driftGroups.length}</span>
-            </h2>
-            {result.driftGroups.length === 0 ? (
-              <p className="empty">No color drift.</p>
-            ) : (
-              <ul className="vlist">
-                {result.driftGroups.map((g) => {
-                  const canBind = !!g.suggestionVariableId && g.status !== 'orphan';
-                  const isBinding = binding === groupKey(g);
-                  return (
-                    <li key={groupKey(g)} className={`violation v--${g.status}`}>
-                      <div className="vrow">
-                        <span className="swatch" style={{ background: g.value }} aria-hidden />
-                        <span className="vvalue">{g.value}</span>
-                        <span className="vcount">×{g.instanceCount}</span>
-                        <span className={`chip chip--${g.status}`}>{STATUS_LABEL[g.status]}</span>
-                      </div>
-                      <div className="vmeta">
-                        <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
-                          {canBind
-                            ? g.deltaLabel ?? 'exact match'
-                            : g.suggestionName
-                              ? `closest: ${g.suggestionName}${g.deltaLabel ? ` (${g.deltaLabel})` : ''}`
-                              : 'no nearby token'}
-                        </span>
-                        <span className="vactions">
-                          <button className="locate" onClick={() => locate(g)}>
-                            Locate
-                          </button>
-                          {canBind && (
-                            <button className="bind" onClick={() => bind(g)} disabled={isBinding}>
-                              {isBinding ? 'Applying…' : `Use ${g.suggestionName}`}
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {result.driftGroups.some((g) => g.status === 'detached') && (
-              <p className="violations__note">
-                “Detached” = the color already matches a token but isn’t using its variable. Using
-                the token changes nothing visually — it just puts the color back under the design
-                system.
-              </p>
-            )}
-          </section>
+          <TypeSection
+            result={data.typography}
+            working={working}
+            onLocate={locate}
+            onUse={useTextStyle}
+          />
         </>
       )}
 
@@ -207,6 +165,147 @@ function App() {
         </p>
       )}
     </div>
+  );
+}
+
+function SectionHead({ title, coherence, drift }: { title: string; coherence: number; drift: number }) {
+  return (
+    <div className={`shead shead--${tone(coherence)}`}>
+      <span className="shead__title">{title}</span>
+      <span className="shead__score">{Math.round(coherence * 100)}%</span>
+      <span className="shead__drift">{drift} to fix</span>
+    </div>
+  );
+}
+
+function ColorSection({
+  result,
+  tokenCount,
+  working,
+  onLocate,
+  onUse,
+}: {
+  result: ColorAuditResult;
+  tokenCount: number;
+  working: string | null;
+  onLocate: (ids: string[]) => void;
+  onUse: (g: DriftGroup) => void;
+}) {
+  const t = result.totals;
+  return (
+    <section className="section">
+      <SectionHead title="Color" coherence={result.coherence} drift={result.driftGroups.length} />
+      {tokenCount === 0 ? (
+        <p className="note">No color variables found (locally or bound on the canvas).</p>
+      ) : (
+        <div className="totals">
+          <Stat label="On token" value={t.bound} />
+          <Stat label="Detached" value={t.detached} />
+          <Stat label="Near" value={t.near} />
+          <Stat label="Off-system" value={t.orphan} />
+        </div>
+      )}
+      {result.driftGroups.length === 0 ? (
+        <p className="empty">No color drift.</p>
+      ) : (
+        <ul className="vlist">
+          {result.driftGroups.map((g) => {
+            const canUse = !!g.suggestionVariableId && g.status !== 'orphan';
+            const isWorking = working === colorKey(g);
+            return (
+              <li key={colorKey(g)} className={`violation v--${g.status}`}>
+                <div className="vrow">
+                  <span className="swatch" style={{ background: g.value }} aria-hidden />
+                  <span className="vvalue">{g.value}</span>
+                  <span className="vcount">×{g.instanceCount}</span>
+                  <span className={`chip chip--${g.status}`}>{COLOR_STATUS_LABEL[g.status]}</span>
+                </div>
+                <div className="vmeta">
+                  <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
+                    {canUse
+                      ? g.deltaLabel ?? 'exact match'
+                      : g.suggestionName
+                        ? `closest: ${g.suggestionName}${g.deltaLabel ? ` (${g.deltaLabel})` : ''}`
+                        : 'no nearby token'}
+                  </span>
+                  <span className="vactions">
+                    <button className="locate" onClick={() => onLocate([...new Set(g.refs.map((r) => r.nodeId))])}>
+                      Locate
+                    </button>
+                    {canUse && (
+                      <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
+                        {isWorking ? 'Applying…' : `Use ${g.suggestionName}`}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function TypeSection({
+  result,
+  working,
+  onLocate,
+  onUse,
+}: {
+  result: TypeAuditResult;
+  working: string | null;
+  onLocate: (ids: string[]) => void;
+  onUse: (g: TypeDriftGroup) => void;
+}) {
+  const t = result.totals;
+  return (
+    <section className="section">
+      <SectionHead title="Typography" coherence={result.coherence} drift={result.driftGroups.length} />
+      {result.styleTokenCount === 0 ? (
+        <p className="note">No text styles found in this file.</p>
+      ) : (
+        <div className="totals">
+          <Stat label="On token" value={t.onToken} />
+          <Stat label="Detached" value={t.detached} />
+          <Stat label="Close" value={t.close} />
+          <Stat label="No style" value={t.off} />
+        </div>
+      )}
+      {result.driftGroups.length === 0 ? (
+        <p className="empty">No type drift.</p>
+      ) : (
+        <ul className="vlist">
+          {result.driftGroups.map((g) => {
+            const canUse = !!g.styleId;
+            const isWorking = working === g.key;
+            return (
+              <li key={g.key} className={`violation v--${g.status}`}>
+                <div className="vrow">
+                  <span className="vvalue">{g.label}</span>
+                  <span className="vcount">×{g.instanceCount}</span>
+                  <span className={`chip chip--${g.status}`}>{TYPE_STATUS_LABEL[g.status]}</span>
+                </div>
+                <div className="vmeta">
+                  <span className="vsuggest vsuggest--none">{TYPE_STATUS_HINT[g.status]}</span>
+                  <span className="vactions">
+                    <button className="locate" onClick={() => onLocate(g.nodeIds)}>
+                      Locate
+                    </button>
+                    {canUse && (
+                      <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
+                        {isWorking ? 'Applying…' : `Use ${g.styleName}`}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
