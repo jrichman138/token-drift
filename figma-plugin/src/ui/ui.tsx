@@ -58,6 +58,20 @@ function colorKey(g: DriftGroup): string {
   return `c:${g.status}:${g.value}`;
 }
 
+// Total drift groups + detached (zero-change) groups across token sections.
+function countDrift(results: { driftGroups: { status: string }[] }[]): {
+  total: number;
+  detached: number;
+} {
+  let total = 0;
+  let detached = 0;
+  for (const r of results) {
+    total += r.driftGroups.length;
+    detached += r.driftGroups.filter((g) => g.status === 'detached').length;
+  }
+  return { total, detached };
+}
+
 function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +131,11 @@ function App() {
         window.setTimeout(() => setToast(null), 2400);
         send({ type: 'run-audit' });
       }
+      if (msg.type === 'fix-all-done') {
+        // The sandbox re-audits itself; just surface the count (audit-result clears `working`).
+        setToast(`Fixed ${msg.fixed} detached. Re-auditing…`);
+        window.setTimeout(() => setToast(null), 2400);
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -166,6 +185,11 @@ function App() {
     send({ type: 'normalize-dimension', value: o.suggest, refs: o.refs });
   }
 
+  function fixAll() {
+    setWorking('fixall');
+    send({ type: 'fix-all-detached' });
+  }
+
   return (
     <div className="app">
       <header className="head">
@@ -210,6 +234,42 @@ function App() {
             </button>
           </div>
 
+          {mode === 'tokens' &&
+            (() => {
+              const { total, detached } = countDrift([
+                data.color,
+                data.typography,
+                data.spacing,
+                data.radius,
+                data.stroke,
+                data.elevation,
+              ]);
+              return (
+                <div className="summary">
+                  <span>
+                    {total === 0 ? (
+                      'No token drift — everything maps to a token.'
+                    ) : (
+                      <>
+                        <strong>{total}</strong> issue{total === 1 ? '' : 's'} to review
+                        {detached > 0 && (
+                          <>
+                            {' · '}
+                            <strong>{detached}</strong> zero-change fix{detached === 1 ? '' : 'es'}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  {detached > 0 && (
+                    <button className="fixall" disabled={working === 'fixall'} onClick={fixAll}>
+                      {working === 'fixall' ? 'Fixing…' : `Fix all ${detached} detached`}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
           {mode === 'tokens' && (
             <>
               <ColorSection
@@ -235,6 +295,23 @@ function App() {
 
           {mode === 'consistency' && (
             <>
+              {(() => {
+                const outliers =
+                  data.scale.spacing.outliers.length +
+                  data.scale.radius.outliers.length +
+                  data.scale.stroke.outliers.length;
+                return (
+                  <p className="summary">
+                    {outliers === 0 ? (
+                      'No outliers — your scales look consistent.'
+                    ) : (
+                      <>
+                        <strong>{outliers}</strong> outlier{outliers === 1 ? '' : 's'} across spacing, radius &amp; stroke
+                      </>
+                    )}
+                  </p>
+                );
+              })()}
               <p className="hint">
                 Outliers found without tokens — values that look like accidental deviations
                 from your de-facto scale. “Set to N” changes the value (a small visual edit).
@@ -280,6 +357,8 @@ function ColorSection({
   onUse: (g: DriftGroup) => void;
 }) {
   const t = result.totals;
+  if (tokenCount === 0) return <CollapsedRow title="Color" note="no color tokens" />;
+  if (result.driftGroups.length === 0) return <CollapsedRow title="Color" note={`${t.bound} on token`} good />;
   return (
     <section className="section">
       <SectionHead title="Color" coherence={result.coherence} drift={result.driftGroups.length} />
@@ -383,6 +462,8 @@ function TypeSection({
   onReplaceFont: (g: TypeDriftGroup, family: string) => void;
 }) {
   const t = result.totals;
+  if (result.styleTokenCount === 0) return <CollapsedRow title="Typography" note="no text styles" />;
+  if (result.driftGroups.length === 0) return <CollapsedRow title="Typography" note={`${t.onToken} on token`} good />;
   return (
     <section className="section">
       <SectionHead title="Typography" coherence={result.coherence} drift={result.driftGroups.length} />
@@ -454,6 +535,8 @@ function DimSection({
 }) {
   const t = result.totals;
   const lower = title.toLowerCase();
+  if (result.tokenCount === 0) return <CollapsedRow title={title} note={`no ${lower} tokens`} />;
+  if (result.driftGroups.length === 0) return <CollapsedRow title={title} note={`${t.bound} on token`} good />;
   return (
     <section className="section">
       <SectionHead title={title} coherence={result.coherence} drift={result.driftGroups.length} />
@@ -526,6 +609,8 @@ function ElevationSection({
   onUse: (g: EffectDriftGroup) => void;
 }) {
   const t = result.totals;
+  if (result.styleTokenCount === 0) return <CollapsedRow title="Elevation" note="no effect styles" />;
+  if (result.driftGroups.length === 0) return <CollapsedRow title="Elevation" note={`${t.onToken} on token`} good />;
   return (
     <section className="section">
       <SectionHead title="Elevation" coherence={result.coherence} drift={result.driftGroups.length} />
@@ -592,6 +677,9 @@ function ScaleSection({
   onLocate: (ids: string[]) => void;
   onNormalize: (category: string, o: ScaleOutlier) => void;
 }) {
+  if (result.total === 0) return <CollapsedRow title={title} note="no raw values" />;
+  if (result.outliers.length === 0)
+    return <CollapsedRow title={title} note={`${result.distinctCount} values · consistent`} good />;
   return (
     <section className="section">
       <div className="shead">
@@ -652,6 +740,19 @@ function ScaleSection({
         </>
       )}
     </section>
+  );
+}
+
+// Compact one-liner for a section with nothing to act on (no tokens, or clean).
+function CollapsedRow({ title, note, good }: { title: string; note: string; good?: boolean }) {
+  return (
+    <div className={`crow${good ? ' crow--good' : ''}`}>
+      <span className="crow__title">{title}</span>
+      <span className="crow__note">
+        {good ? '✓ ' : ''}
+        {note}
+      </span>
+    </div>
   );
 }
 

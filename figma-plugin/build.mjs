@@ -89,6 +89,24 @@ function htmlTemplate(js) {
     background: var(--bg-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
   }
   .scalechip em { color: var(--text-secondary); font-style: normal; }
+  .summary {
+    margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--bg-secondary);
+    line-height: 1.4; display: flex; align-items: center; gap: 8px;
+  }
+  .summary strong { font-weight: 700; }
+  .summary .fixall {
+    margin-left: auto; flex: 0 0 auto; appearance: none; border: 0; border-radius: 6px;
+    padding: 6px 10px; background: var(--accent); color: var(--accent-text);
+    font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .summary .fixall:disabled { opacity: 0.6; cursor: default; }
+  .crow {
+    display: flex; align-items: baseline; gap: 8px; padding: 6px 2px;
+    border-top: 1px solid var(--border);
+  }
+  .crow__title { font-size: 13px; font-weight: 600; }
+  .crow__note { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
+  .crow--good .crow__note { color: var(--good); }
   .section { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
   .shead { display: flex; align-items: baseline; gap: 8px; }
   .shead__title { font-size: 13px; font-weight: 600; }

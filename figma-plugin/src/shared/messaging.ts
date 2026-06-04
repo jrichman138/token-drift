@@ -16,7 +16,8 @@ export type UIMessage =
   | { type: 'replace-font'; family: string; nodeIds: string[] } // type: swap only the font family
   | { type: 'bind-dimension'; variableId: string; refs: DimRef[] } // spacing/radius: bind to a variable
   | { type: 'apply-effect-style'; styleId: string; nodeIds: string[] } // elevation: apply an effect style
-  | { type: 'normalize-dimension'; value: number; refs: DimRef[] }; // scale: set these fields to a value
+  | { type: 'normalize-dimension'; value: number; refs: DimRef[] } // scale: set these fields to a value
+  | { type: 'fix-all-detached' }; // apply every zero-change detached fix at once
 
 // sandbox -> UI.
 export type PluginMessage =
@@ -44,4 +45,5 @@ export type PluginMessage =
   | { type: 'replace-font-done'; fixed: number; failed: number; fallbacks: number }
   | { type: 'bind-dimension-done'; fixed: number; failed: number }
   | { type: 'apply-effect-style-done'; fixed: number; failed: number }
-  | { type: 'normalize-dimension-done'; fixed: number; failed: number };
+  | { type: 'normalize-dimension-done'; fixed: number; failed: number }
+  | { type: 'fix-all-done'; fixed: number };

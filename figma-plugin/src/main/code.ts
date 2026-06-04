@@ -37,35 +37,29 @@ function scopeAndRoots(): { roots: readonly SceneNode[]; scope: string } {
   return { roots: figma.currentPage.children, scope: `Page: ${figma.currentPage.name}` };
 }
 
-async function runAudit(): Promise<void> {
-  const { roots, scope } = scopeAndRoots();
-
-  // Color.
+// Run every audit over the given roots and return the results (no posting), so
+// both runAudit and fixAllDetached can share it.
+async function computeAudit(roots: readonly SceneNode[]) {
   const colorEx = extractObservations(roots);
   const { tokens, warnings, colorTokenCount, variableIdByToken } = await collectTokens(
     colorEx.boundVariableIds,
   );
   const color = auditColors(colorEx.observations, tokens, variableIdByToken);
 
-  // Typography.
   const textEx = extractText(roots);
   const textTokens = await collectTextStyleTokens(textEx.referencedStyleIds);
   const typography = auditTypography(textEx.observations, textTokens);
 
-  // Spacing & radius.
   const dimEx = extractDimensions(roots);
   const dimTokens = await collectDimensionTokens(dimEx.boundVariableIds);
   const { spacing, radius, stroke } = auditDimensions(dimEx.observations, dimTokens);
-  // Token-free scale-consistency analysis (reuses the dimension observations).
-  const scale = analyzeScales(dimEx.observations);
+  const scale = analyzeScales(dimEx.observations); // token-free scale-consistency
 
-  // Elevation (effects).
   const effEx = extractEffects(roots);
   const effTokens = await collectEffectStyleTokens(effEx.referencedStyleIds);
   const elevation = auditEffects(effEx.observations, effTokens);
 
-  post({
-    type: 'audit-result',
+  return {
     color,
     typography,
     spacing,
@@ -73,11 +67,30 @@ async function runAudit(): Promise<void> {
     stroke,
     elevation,
     scale,
-    scope,
-    nodeCount: colorEx.nodeCount,
     colorTokenCount,
-    truncated: colorEx.truncated,
     warnings,
+    nodeCount: colorEx.nodeCount,
+    truncated: colorEx.truncated,
+  };
+}
+
+async function runAudit(): Promise<void> {
+  const { roots, scope } = scopeAndRoots();
+  const a = await computeAudit(roots);
+  post({
+    type: 'audit-result',
+    color: a.color,
+    typography: a.typography,
+    spacing: a.spacing,
+    radius: a.radius,
+    stroke: a.stroke,
+    elevation: a.elevation,
+    scale: a.scale,
+    scope,
+    nodeCount: a.nodeCount,
+    colorTokenCount: a.colorTokenCount,
+    truncated: a.truncated,
+    warnings: a.warnings,
   });
 }
 
@@ -111,12 +124,11 @@ function bindPaintInArray(paints: readonly Paint[], index: number, variable: Var
   return next;
 }
 
-async function rebind(variableId: string, refs: NodeRef[]): Promise<void> {
+type FixCount = { fixed: number; failed: number };
+
+async function rebindCore(variableId: string, refs: NodeRef[]): Promise<FixCount> {
   const variable = await figma.variables.getVariableByIdAsync(variableId);
-  if (!variable) {
-    post({ type: 'rebind-done', fixed: 0, failed: refs.length });
-    return;
-  }
+  if (!variable) return { fixed: 0, failed: refs.length };
   const byNode = new Map<string, NodeRef[]>();
   for (const ref of refs) {
     const list = byNode.get(ref.nodeId);
@@ -154,17 +166,14 @@ async function rebind(variableId: string, refs: NodeRef[]): Promise<void> {
       (node as unknown as Record<string, unknown>)[key] = paints;
     }
   }
-  post({ type: 'rebind-done', fixed, failed });
+  return { fixed, failed };
 }
 
 // ---- type fix: apply a text style ------------------------------------------
 
-async function applyStyle(styleId: string, nodeIds: string[]): Promise<void> {
+async function applyStyleCore(styleId: string, nodeIds: string[]): Promise<FixCount> {
   const style = await figma.getStyleByIdAsync(styleId);
-  if (!style || style.type !== 'TEXT') {
-    post({ type: 'apply-style-done', fixed: 0, failed: nodeIds.length });
-    return;
-  }
+  if (!style || style.type !== 'TEXT') return { fixed: 0, failed: nodeIds.length };
   // Load the style's font so the node can adopt it.
   await figma.loadFontAsync((style as TextStyle).fontName);
 
@@ -187,7 +196,7 @@ async function applyStyle(styleId: string, nodeIds: string[]): Promise<void> {
       failed += 1;
     }
   }
-  post({ type: 'apply-style-done', fixed, failed });
+  return { fixed, failed };
 }
 
 // ---- type fix: swap only the font family -----------------------------------
@@ -241,12 +250,9 @@ async function replaceFont(family: string, nodeIds: string[]): Promise<void> {
 
 // ---- spacing/radius fix: bind a number property to a variable --------------
 
-async function bindDimension(variableId: string, refs: DimRef[]): Promise<void> {
+async function bindDimensionCore(variableId: string, refs: DimRef[]): Promise<FixCount> {
   const variable = await figma.variables.getVariableByIdAsync(variableId);
-  if (!variable) {
-    post({ type: 'bind-dimension-done', fixed: 0, failed: refs.length });
-    return;
-  }
+  if (!variable) return { fixed: 0, failed: refs.length };
   let fixed = 0;
   let failed = 0;
   for (const ref of refs) {
@@ -265,17 +271,14 @@ async function bindDimension(variableId: string, refs: DimRef[]): Promise<void> 
       failed += 1;
     }
   }
-  post({ type: 'bind-dimension-done', fixed, failed });
+  return { fixed, failed };
 }
 
 // ---- elevation fix: apply an effect style ----------------------------------
 
-async function applyEffectStyle(styleId: string, nodeIds: string[]): Promise<void> {
+async function applyEffectStyleCore(styleId: string, nodeIds: string[]): Promise<FixCount> {
   const style = await figma.getStyleByIdAsync(styleId);
-  if (!style || style.type !== 'EFFECT') {
-    post({ type: 'apply-effect-style-done', fixed: 0, failed: nodeIds.length });
-    return;
-  }
+  if (!style || style.type !== 'EFFECT') return { fixed: 0, failed: nodeIds.length };
   let fixed = 0;
   let failed = 0;
   for (const id of [...new Set(nodeIds)]) {
@@ -291,7 +294,41 @@ async function applyEffectStyle(styleId: string, nodeIds: string[]): Promise<voi
       failed += 1;
     }
   }
-  post({ type: 'apply-effect-style-done', fixed, failed });
+  return { fixed, failed };
+}
+
+// ---- bulk: apply every zero-change "detached" fix across all categories ----
+
+async function fixAllDetached(): Promise<void> {
+  const { roots } = scopeAndRoots();
+  const a = await computeAudit(roots);
+  let fixed = 0;
+
+  for (const g of a.color.driftGroups) {
+    if (g.status === 'detached' && g.suggestionVariableId) {
+      fixed += (await rebindCore(g.suggestionVariableId, g.refs)).fixed;
+    }
+  }
+  for (const g of a.typography.driftGroups) {
+    if (g.status === 'detached' && g.styleId) {
+      fixed += (await applyStyleCore(g.styleId, g.nodeIds)).fixed;
+    }
+  }
+  for (const dim of [a.spacing, a.radius, a.stroke]) {
+    for (const g of dim.driftGroups) {
+      if (g.status === 'detached' && g.suggestionVariableId) {
+        fixed += (await bindDimensionCore(g.suggestionVariableId, g.refs)).fixed;
+      }
+    }
+  }
+  for (const g of a.elevation.driftGroups) {
+    if (g.status === 'detached' && g.styleId) {
+      fixed += (await applyEffectStyleCore(g.styleId, g.nodeIds)).fixed;
+    }
+  }
+
+  post({ type: 'fix-all-done', fixed });
+  await runAudit(); // refresh the report
 }
 
 // ---- scale fix: normalize a raw number to a canonical value ----------------
@@ -319,12 +356,17 @@ figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
   try {
     if (message.type === 'run-audit') await runAudit();
     else if (message.type === 'locate') await locate(message.nodeIds);
-    else if (message.type === 'rebind') await rebind(message.variableId, message.refs);
-    else if (message.type === 'apply-style') await applyStyle(message.styleId, message.nodeIds);
+    else if (message.type === 'rebind')
+      post({ type: 'rebind-done', ...(await rebindCore(message.variableId, message.refs)) });
+    else if (message.type === 'apply-style')
+      post({ type: 'apply-style-done', ...(await applyStyleCore(message.styleId, message.nodeIds)) });
     else if (message.type === 'replace-font') await replaceFont(message.family, message.nodeIds);
-    else if (message.type === 'bind-dimension') await bindDimension(message.variableId, message.refs);
-    else if (message.type === 'apply-effect-style') await applyEffectStyle(message.styleId, message.nodeIds);
+    else if (message.type === 'bind-dimension')
+      post({ type: 'bind-dimension-done', ...(await bindDimensionCore(message.variableId, message.refs)) });
+    else if (message.type === 'apply-effect-style')
+      post({ type: 'apply-effect-style-done', ...(await applyEffectStyleCore(message.styleId, message.nodeIds)) });
     else if (message.type === 'normalize-dimension') await normalizeDimension(message.value, message.refs);
+    else if (message.type === 'fix-all-detached') await fixAllDetached();
   } catch (error) {
     post({ type: 'audit-error', error: error instanceof Error ? error.message : String(error) });
   }
