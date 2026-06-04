@@ -8,7 +8,7 @@
 // library systems) plus local FLOAT variables, classified into spacing vs radius
 // by their variable scopes.
 
-export type DimCategory = 'spacing' | 'radius';
+export type DimCategory = 'spacing' | 'radius' | 'stroke';
 export type DimStatus = 'detached' | 'off';
 
 // Fields we read per category (only present/relevant on the right node types).
@@ -21,6 +21,7 @@ const SPACING_FIELDS = [
   'paddingBottom',
 ] as const;
 const RADIUS_FIELDS = ['topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius'] as const;
+const STROKE_FIELDS = ['strokeWeight'] as const;
 
 export interface DimRef {
   nodeId: string;
@@ -76,9 +77,27 @@ const EXACT_EPSILON = 0.01;
 
 // ---- extraction ------------------------------------------------------------
 
+// Binding uniform `strokeWeight` actually stores the alias under the four
+// per-side keys, so detect a bound stroke by checking any of them.
+const STROKE_WEIGHT_KEYS = [
+  'strokeWeight',
+  'strokeTopWeight',
+  'strokeRightWeight',
+  'strokeBottomWeight',
+  'strokeLeftWeight',
+];
+
 function boundId(node: SceneNode, field: string): string | null {
   const bound = (node as { boundVariables?: Record<string, VariableAlias | undefined> }).boundVariables;
-  return bound?.[field]?.id ?? null;
+  if (!bound) return null;
+  if (field === 'strokeWeight') {
+    for (const k of STROKE_WEIGHT_KEYS) {
+      const id = bound[k]?.id;
+      if (id) return id;
+    }
+    return null;
+  }
+  return bound[field]?.id ?? null;
 }
 
 export function extractDimensions(roots: readonly SceneNode[]): DimExtractResult {
@@ -107,6 +126,14 @@ export function extractDimensions(roots: readonly SceneNode[]): DimExtractResult
     nodeCount += 1;
     if ('layoutMode' in node && node.layoutMode !== 'NONE') read(node, SPACING_FIELDS, 'spacing');
     if ('topLeftRadius' in node) read(node, RADIUS_FIELDS, 'radius');
+    // Stroke weight only matters where there's a visible stroke.
+    if (
+      'strokes' in node &&
+      Array.isArray(node.strokes) &&
+      node.strokes.some((p) => p.visible !== false)
+    ) {
+      read(node, STROKE_FIELDS, 'stroke');
+    }
     if ('children' in node) {
       for (const child of node.children) {
         if (nodeCount >= MAX_NODES) {
@@ -151,15 +178,19 @@ async function resolveVariableFloat(variable: Variable): Promise<number | null> 
 export interface DimTokens {
   spacing: DimToken[];
   radius: DimToken[];
+  stroke: DimToken[];
 }
 
-// Classify a FLOAT variable into spacing/radius by its scopes. ALL_SCOPES counts
-// as both (we can't tell), so it's available to either matcher.
-function categoriesForScopes(scopes: readonly VariableScope[]): { spacing: boolean; radius: boolean } {
+// Classify a FLOAT variable into spacing/radius/stroke by its scopes. ALL_SCOPES
+// counts for all (we can't tell), so it's available to every matcher.
+function categoriesForScopes(
+  scopes: readonly VariableScope[],
+): { spacing: boolean; radius: boolean; stroke: boolean } {
   const all = scopes.includes('ALL_SCOPES');
   return {
     spacing: all || scopes.includes('GAP') || scopes.includes('WIDTH_HEIGHT'),
     radius: all || scopes.includes('CORNER_RADIUS'),
+    stroke: all || scopes.includes('STROKE_FLOAT'),
   };
 }
 
@@ -171,8 +202,10 @@ export async function collectDimensionTokens(boundVariableIds: string[]): Promis
 
   const spacing: DimToken[] = [];
   const radius: DimToken[] = [];
+  const stroke: DimToken[] = [];
   const seenSpacing = new Set<string>();
   const seenRadius = new Set<string>();
+  const seenStroke = new Set<string>();
 
   for (const id of ids) {
     const variable = await figma.variables.getVariableByIdAsync(id);
@@ -189,8 +222,12 @@ export async function collectDimensionTokens(boundVariableIds: string[]): Promis
       seenRadius.add(id);
       radius.push(token);
     }
+    if (cats.stroke && !seenStroke.has(id)) {
+      seenStroke.add(id);
+      stroke.push(token);
+    }
   }
-  return { spacing, radius };
+  return { spacing, radius, stroke };
 }
 
 // ---- audit -----------------------------------------------------------------
@@ -266,9 +303,10 @@ function auditOne(category: DimCategory, observations: DimObservation[], tokens:
 export function auditDimensions(
   observations: DimObservation[],
   tokens: DimTokens,
-): { spacing: DimAuditResult; radius: DimAuditResult } {
+): { spacing: DimAuditResult; radius: DimAuditResult; stroke: DimAuditResult } {
   return {
     spacing: auditOne('spacing', observations.filter((o) => o.category === 'spacing'), tokens.spacing),
     radius: auditOne('radius', observations.filter((o) => o.category === 'radius'), tokens.radius),
+    stroke: auditOne('stroke', observations.filter((o) => o.category === 'stroke'), tokens.stroke),
   };
 }

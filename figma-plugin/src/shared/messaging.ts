@@ -24,6 +24,7 @@ export type PluginMessage =
       typography: TypeAuditResult;
       spacing: DimAuditResult;
       radius: DimAuditResult;
+      stroke: DimAuditResult;
       elevation: EffectAuditResult;
       scope: string; // "Selection (3 layers)" or "Page: Home"
       nodeCount: number;

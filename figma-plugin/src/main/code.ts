@@ -54,7 +54,7 @@ async function runAudit(): Promise<void> {
   // Spacing & radius.
   const dimEx = extractDimensions(roots);
   const dimTokens = await collectDimensionTokens(dimEx.boundVariableIds);
-  const { spacing, radius } = auditDimensions(dimEx.observations, dimTokens);
+  const { spacing, radius, stroke } = auditDimensions(dimEx.observations, dimTokens);
 
   // Elevation (effects).
   const effEx = extractEffects(roots);
@@ -67,6 +67,7 @@ async function runAudit(): Promise<void> {
     typography,
     spacing,
     radius,
+    stroke,
     elevation,
     scope,
     nodeCount: colorEx.nodeCount,

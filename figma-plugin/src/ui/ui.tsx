@@ -11,6 +11,7 @@ interface ResultState {
   typography: TypeAuditResult;
   spacing: DimAuditResult;
   radius: DimAuditResult;
+  stroke: DimAuditResult;
   elevation: EffectAuditResult;
   scope: string;
   nodeCount: number;
@@ -80,6 +81,7 @@ function App() {
           typography: msg.typography,
           spacing: msg.spacing,
           radius: msg.radius,
+          stroke: msg.stroke,
           elevation: msg.elevation,
           scope: msg.scope,
           nodeCount: msg.nodeCount,
@@ -204,6 +206,14 @@ function App() {
           <DimSection
             title="Radius"
             result={data.radius}
+            working={working}
+            onLocate={locate}
+            onUse={bindDimension}
+          />
+
+          <DimSection
+            title="Stroke"
+            result={data.stroke}
             working={working}
             onLocate={locate}
             onUse={bindDimension}
