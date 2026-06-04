@@ -69,8 +69,8 @@ function App() {
       if (msg.type === 'rebind-done') {
         const note =
           msg.failed > 0
-            ? `Bound ${msg.fixed}, ${msg.failed} skipped. Re-auditing…`
-            : `Bound ${msg.fixed}. Re-auditing…`;
+            ? `${msg.fixed} now use the token, ${msg.failed} skipped. Re-auditing…`
+            : `${msg.fixed} now use the token. Re-auditing…`;
         setToast(note);
         window.setTimeout(() => setToast(null), 2200);
         send({ type: 'run-audit' }); // refresh so the list reflects the fix
@@ -123,7 +123,7 @@ function App() {
           <section className={`verdict verdict--${tone(result.coherence)}`}>
             <div className="score">{Math.round(result.coherence * 100)}%</div>
             <div className="verdict__meta">
-              <div className="verdict__label">{t.bound} of {t.total} paints bound</div>
+              <div className="verdict__label">{t.bound} of {t.total} using a token</div>
               <div className="verdict__scope">{data.scope}</div>
             </div>
           </section>
@@ -141,7 +141,7 @@ function App() {
           )}
 
           <div className="totals">
-            <Stat label="Bound" value={t.bound} />
+            <Stat label="On token" value={t.bound} />
             <Stat label="Detached" value={t.detached} />
             <Stat label="Near" value={t.near} />
             <Stat label="Off-system" value={t.orphan} />
@@ -152,7 +152,7 @@ function App() {
               Drifting colors <span className="count">{result.driftGroups.length}</span>
             </h2>
             {result.driftGroups.length === 0 ? (
-              <p className="empty">Every paint is bound to a token. 🎯</p>
+              <p className="empty">No color drift.</p>
             ) : (
               <ul className="vlist">
                 {result.driftGroups.map((g) => {
@@ -167,21 +167,20 @@ function App() {
                         <span className={`chip chip--${g.status}`}>{STATUS_LABEL[g.status]}</span>
                       </div>
                       <div className="vmeta">
-                        {g.suggestionName ? (
-                          <span className="vsuggest">
-                            → {g.suggestionName}
-                            {g.deltaLabel ? ` (${g.deltaLabel})` : ''}
-                          </span>
-                        ) : (
-                          <span className="vsuggest vsuggest--none">no nearby token</span>
-                        )}
+                        <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
+                          {canBind
+                            ? g.deltaLabel ?? 'exact match'
+                            : g.suggestionName
+                              ? `closest: ${g.suggestionName}${g.deltaLabel ? ` (${g.deltaLabel})` : ''}`
+                              : 'no nearby token'}
+                        </span>
                         <span className="vactions">
                           <button className="locate" onClick={() => locate(g)}>
                             Locate
                           </button>
                           {canBind && (
                             <button className="bind" onClick={() => bind(g)} disabled={isBinding}>
-                              {isBinding ? 'Binding…' : `Bind ×${g.instanceCount}`}
+                              {isBinding ? 'Applying…' : `Use ${g.suggestionName}`}
                             </button>
                           )}
                         </span>
@@ -193,8 +192,9 @@ function App() {
             )}
             {result.driftGroups.some((g) => g.status === 'detached') && (
               <p className="violations__note">
-                “Detached” = the color already matches a token but isn’t linked to its variable.
-                Binding it changes nothing visually — it just puts it back under the design system.
+                “Detached” = the color already matches a token but isn’t using its variable. Using
+                the token changes nothing visually — it just puts the color back under the design
+                system.
               </p>
             )}
           </section>
