@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Local-only submission notes (never publish), like the extension's STORE_SUBMISSION.md
+PUBLISH.md
