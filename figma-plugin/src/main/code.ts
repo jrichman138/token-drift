@@ -6,6 +6,12 @@
 //   apply-style  — apply a text style to a set of text nodes (the type fix)
 
 import { auditColors, type NodeRef } from '../figma/audit';
+import {
+  auditDimensions,
+  collectDimensionTokens,
+  extractDimensions,
+  type DimRef,
+} from '../figma/dimension';
 import { extractObservations, type PaintProperty } from '../figma/extract';
 import { collectTokens } from '../figma/tokens';
 import { auditTypography, collectTextStyleTokens, extractText } from '../figma/text';
@@ -44,10 +50,17 @@ async function runAudit(): Promise<void> {
   const textTokens = await collectTextStyleTokens(textEx.referencedStyleIds);
   const typography = auditTypography(textEx.observations, textTokens);
 
+  // Spacing & radius.
+  const dimEx = extractDimensions(roots);
+  const dimTokens = await collectDimensionTokens(dimEx.boundVariableIds);
+  const { spacing, radius } = auditDimensions(dimEx.observations, dimTokens);
+
   post({
     type: 'audit-result',
     color,
     typography,
+    spacing,
+    radius,
     scope,
     nodeCount: colorEx.nodeCount,
     colorTokenCount,
@@ -214,6 +227,35 @@ async function replaceFont(family: string, nodeIds: string[]): Promise<void> {
   post({ type: 'replace-font-done', fixed, failed, fallbacks });
 }
 
+// ---- spacing/radius fix: bind a number property to a variable --------------
+
+async function bindDimension(variableId: string, refs: DimRef[]): Promise<void> {
+  const variable = await figma.variables.getVariableByIdAsync(variableId);
+  if (!variable) {
+    post({ type: 'bind-dimension-done', fixed: 0, failed: refs.length });
+    return;
+  }
+  let fixed = 0;
+  let failed = 0;
+  for (const ref of refs) {
+    const node = await figma.getNodeByIdAsync(ref.nodeId);
+    if (!node || !('setBoundVariable' in node)) {
+      failed += 1;
+      continue;
+    }
+    try {
+      (node as unknown as { setBoundVariable: (field: string, v: Variable) => void }).setBoundVariable(
+        ref.field,
+        variable,
+      );
+      fixed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  post({ type: 'bind-dimension-done', fixed, failed });
+}
+
 figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
   try {
     if (message.type === 'run-audit') await runAudit();
@@ -221,6 +263,7 @@ figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
     else if (message.type === 'rebind') await rebind(message.variableId, message.refs);
     else if (message.type === 'apply-style') await applyStyle(message.styleId, message.nodeIds);
     else if (message.type === 'replace-font') await replaceFont(message.family, message.nodeIds);
+    else if (message.type === 'bind-dimension') await bindDimension(message.variableId, message.refs);
   } catch (error) {
     post({ type: 'audit-error', error: error instanceof Error ? error.message : String(error) });
   }

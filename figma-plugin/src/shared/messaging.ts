@@ -2,6 +2,7 @@
 // UI iframe (ui/ui.tsx).
 
 import type { ColorAuditResult, NodeRef } from '../figma/audit';
+import type { DimAuditResult, DimRef } from '../figma/dimension';
 import type { TypeAuditResult } from '../figma/text';
 
 // UI -> sandbox.
@@ -10,7 +11,8 @@ export type UIMessage =
   | { type: 'locate'; nodeIds: string[] } // select + zoom to these nodes
   | { type: 'rebind'; variableId: string; refs: NodeRef[] } // color: bind paints to a variable
   | { type: 'apply-style'; styleId: string; nodeIds: string[] } // type: apply a text style
-  | { type: 'replace-font'; family: string; nodeIds: string[] }; // type: swap only the font family
+  | { type: 'replace-font'; family: string; nodeIds: string[] } // type: swap only the font family
+  | { type: 'bind-dimension'; variableId: string; refs: DimRef[] }; // spacing/radius: bind to a variable
 
 // sandbox -> UI.
 export type PluginMessage =
@@ -18,6 +20,8 @@ export type PluginMessage =
       type: 'audit-result';
       color: ColorAuditResult;
       typography: TypeAuditResult;
+      spacing: DimAuditResult;
+      radius: DimAuditResult;
       scope: string; // "Selection (3 layers)" or "Page: Home"
       nodeCount: number;
       colorTokenCount: number;
@@ -30,4 +34,5 @@ export type PluginMessage =
   | { type: 'apply-style-done'; fixed: number; failed: number }
   // `fallbacks` = nodes where the original weight didn't exist in the new family
   // and we substituted the closest available one.
-  | { type: 'replace-font-done'; fixed: number; failed: number; fallbacks: number };
+  | { type: 'replace-font-done'; fixed: number; failed: number; fallbacks: number }
+  | { type: 'bind-dimension-done'; fixed: number; failed: number };

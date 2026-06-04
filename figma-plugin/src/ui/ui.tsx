@@ -1,12 +1,15 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ColorAuditResult, DriftGroup } from '../figma/audit';
+import type { DimAuditResult, DimDriftGroup } from '../figma/dimension';
 import type { TypeAuditResult, TypeDriftGroup } from '../figma/text';
 import type { PluginMessage, UIMessage } from '../shared/messaging';
 
 interface ResultState {
   color: ColorAuditResult;
   typography: TypeAuditResult;
+  spacing: DimAuditResult;
+  radius: DimAuditResult;
   scope: string;
   nodeCount: number;
   colorTokenCount: number;
@@ -73,6 +76,8 @@ function App() {
         setData({
           color: msg.color,
           typography: msg.typography,
+          spacing: msg.spacing,
+          radius: msg.radius,
           scope: msg.scope,
           nodeCount: msg.nodeCount,
           colorTokenCount: msg.colorTokenCount,
@@ -84,7 +89,8 @@ function App() {
       if (
         msg.type === 'rebind-done' ||
         msg.type === 'apply-style-done' ||
-        msg.type === 'replace-font-done'
+        msg.type === 'replace-font-done' ||
+        msg.type === 'bind-dimension-done'
       ) {
         const fb =
           msg.type === 'replace-font-done' && msg.fallbacks > 0
@@ -130,6 +136,12 @@ function App() {
     send({ type: 'replace-font', family, nodeIds: g.nodeIds });
   }
 
+  function bindDimension(g: DimDriftGroup) {
+    if (!g.suggestionVariableId) return;
+    setWorking(g.key);
+    send({ type: 'bind-dimension', variableId: g.suggestionVariableId, refs: g.refs });
+  }
+
   return (
     <div className="app">
       <header className="head">
@@ -169,6 +181,22 @@ function App() {
             onLocate={locate}
             onUse={useTextStyle}
             onReplaceFont={replaceFont}
+          />
+
+          <DimSection
+            title="Spacing"
+            result={data.spacing}
+            working={working}
+            onLocate={locate}
+            onUse={bindDimension}
+          />
+
+          <DimSection
+            title="Radius"
+            result={data.radius}
+            working={working}
+            onLocate={locate}
+            onUse={bindDimension}
           />
         </>
       )}
@@ -353,6 +381,81 @@ function TypeSection({
                         disabled={isWorking}
                         onApply={(family) => onReplaceFont(g, family)}
                       />
+                    )}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DimSection({
+  title,
+  result,
+  working,
+  onLocate,
+  onUse,
+}: {
+  title: string;
+  result: DimAuditResult;
+  working: string | null;
+  onLocate: (ids: string[]) => void;
+  onUse: (g: DimDriftGroup) => void;
+}) {
+  const t = result.totals;
+  const lower = title.toLowerCase();
+  return (
+    <section className="section">
+      <SectionHead title={title} coherence={result.coherence} drift={result.driftGroups.length} />
+      {result.tokenCount === 0 ? (
+        <p className="note">No {lower} variables found (locally or bound on the canvas).</p>
+      ) : (
+        <div className="totals">
+          <Stat label="On token" value={t.bound} />
+          <Stat label="Detached" value={t.detached} />
+          <Stat label="Off-system" value={t.off} />
+        </div>
+      )}
+      {result.driftGroups.length === 0 ? (
+        <p className="empty">No {lower} drift.</p>
+      ) : (
+        <ul className="vlist">
+          {result.driftGroups.map((g) => {
+            const canUse = !!g.suggestionVariableId; // detached only
+            const isWorking = working === g.key;
+            const variant = g.status === 'detached' ? 'detached' : 'orphan';
+            return (
+              <li key={g.key} className={`violation v--${variant}`}>
+                <div className="vrow">
+                  <span className="vvalue">{g.value}px</span>
+                  <span className="vcount">×{g.instanceCount}</span>
+                  <span className={`chip chip--${variant}`}>
+                    {g.status === 'detached' ? 'Detached' : 'Off-system'}
+                  </span>
+                </div>
+                <div className="vmeta">
+                  <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
+                    {canUse
+                      ? 'exact match'
+                      : g.suggestionName
+                        ? `closest: ${g.suggestionName} (${g.suggestionValue}px${g.deltaLabel ? `, ${g.deltaLabel}` : ''})`
+                        : 'no nearby token'}
+                  </span>
+                  <span className="vactions">
+                    <button
+                      className="locate"
+                      onClick={() => onLocate([...new Set(g.refs.map((r) => r.nodeId))])}
+                    >
+                      Locate
+                    </button>
+                    {canUse && (
+                      <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
+                        {isWorking ? 'Applying…' : `Use ${g.suggestionName}`}
+                      </button>
                     )}
                   </span>
                 </div>
