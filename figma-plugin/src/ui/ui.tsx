@@ -81,13 +81,21 @@ function App() {
         });
         return;
       }
-      if (msg.type === 'rebind-done' || msg.type === 'apply-style-done') {
+      if (
+        msg.type === 'rebind-done' ||
+        msg.type === 'apply-style-done' ||
+        msg.type === 'replace-font-done'
+      ) {
+        const fb =
+          msg.type === 'replace-font-done' && msg.fallbacks > 0
+            ? `, ${msg.fallbacks} weight-substituted`
+            : '';
         const note =
           msg.failed > 0
-            ? `${msg.fixed} fixed, ${msg.failed} skipped. Re-auditing…`
-            : `${msg.fixed} fixed. Re-auditing…`;
+            ? `${msg.fixed} fixed${fb}, ${msg.failed} skipped. Re-auditing…`
+            : `${msg.fixed} fixed${fb}. Re-auditing…`;
         setToast(note);
-        window.setTimeout(() => setToast(null), 2200);
+        window.setTimeout(() => setToast(null), 2400);
         send({ type: 'run-audit' });
       }
     }
@@ -115,6 +123,11 @@ function App() {
     if (!g.styleId) return;
     setWorking(g.key);
     send({ type: 'apply-style', styleId: g.styleId, nodeIds: g.nodeIds });
+  }
+
+  function replaceFont(g: TypeDriftGroup, family: string) {
+    setWorking(g.key);
+    send({ type: 'replace-font', family, nodeIds: g.nodeIds });
   }
 
   return (
@@ -155,6 +168,7 @@ function App() {
             working={working}
             onLocate={locate}
             onUse={useTextStyle}
+            onReplaceFont={replaceFont}
           />
         </>
       )}
@@ -248,16 +262,51 @@ function ColorSection({
   );
 }
 
+function FontSwap({
+  families,
+  disabled,
+  onApply,
+}: {
+  families: string[];
+  disabled: boolean;
+  onApply: (family: string) => void;
+}) {
+  const [family, setFamily] = useState(families[0]);
+  if (families.length === 1) {
+    return (
+      <button className="bind" disabled={disabled} onClick={() => onApply(families[0])}>
+        {disabled ? 'Applying…' : `Use ${families[0]}`}
+      </button>
+    );
+  }
+  return (
+    <span className="fontswap">
+      <select value={family} onChange={(e) => setFamily(e.target.value)} disabled={disabled}>
+        {families.map((f) => (
+          <option key={f} value={f}>
+            {f}
+          </option>
+        ))}
+      </select>
+      <button className="bind" disabled={disabled} onClick={() => onApply(family)}>
+        {disabled ? '…' : 'Use'}
+      </button>
+    </span>
+  );
+}
+
 function TypeSection({
   result,
   working,
   onLocate,
   onUse,
+  onReplaceFont,
 }: {
   result: TypeAuditResult;
   working: string | null;
   onLocate: (ids: string[]) => void;
   onUse: (g: TypeDriftGroup) => void;
+  onReplaceFont: (g: TypeDriftGroup, family: string) => void;
 }) {
   const t = result.totals;
   return (
@@ -297,6 +346,13 @@ function TypeSection({
                       <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
                         {isWorking ? 'Applying…' : `Use ${g.styleName}`}
                       </button>
+                    )}
+                    {g.offFont && result.systemFamilies.length > 0 && (
+                      <FontSwap
+                        families={result.systemFamilies}
+                        disabled={isWorking}
+                        onApply={(family) => onReplaceFont(g, family)}
+                      />
                     )}
                   </span>
                 </div>

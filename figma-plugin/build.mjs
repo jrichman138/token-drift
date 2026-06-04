@@ -140,6 +140,11 @@ function htmlTemplate(js) {
   .vactions button:hover { background: var(--bg); border-color: var(--accent); }
   .vactions .bind { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   .vactions .bind:disabled { opacity: 0.6; cursor: default; }
+  .fontswap { display: inline-flex; gap: 4px; align-items: center; }
+  .fontswap select {
+    appearance: none; border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 6px; background: var(--bg); color: var(--text); font-size: 11px; max-width: 110px;
+  }
   .violations__note { margin: 8px 0 0; color: var(--text-secondary); line-height: 1.4; font-size: 11px; }
   .toast {
     margin: 0; padding: 8px 10px; border-radius: 6px; line-height: 1.4;

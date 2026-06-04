@@ -69,12 +69,14 @@ export interface TypeDriftGroup {
   sampleSelectors: string[];
   styleId?: string; // present for detached/close — the style to apply
   styleName?: string;
+  offFont?: boolean; // off-system font (family not in any text style) — swappable
 }
 
 export interface TypeAuditResult {
   coherence: number; // on-token ÷ total text nodes
   totals: { total: number; onToken: number; detached: number; close: number; off: number; mixed: number };
   styleTokenCount: number;
+  systemFamilies: string[]; // font families the design system uses (swap targets)
   driftGroups: TypeDriftGroup[];
 }
 
@@ -292,7 +294,12 @@ export function auditTypography(observations: TextObservation[], bundle: TextTok
     off += 1;
     const offFont = !bundle.allowedFamilies.has(obs.family);
     const label = `${obs.family} ${obs.style} · ${obs.fontSize}${offFont ? '  (off-system font)' : ''}`;
-    push(`off:${coreSig(obs.family, obs.style, obs.fontSize)}`, 'off', label, obs);
+    const offKey = `off:${coreSig(obs.family, obs.style, obs.fontSize)}`;
+    push(offKey, 'off', label, obs);
+    if (offFont) {
+      const g = groups.get(offKey);
+      if (g) g.offFont = true;
+    }
   }
 
   const driftGroups = [...groups.values()].sort(
@@ -308,6 +315,7 @@ export function auditTypography(observations: TextObservation[], bundle: TextTok
     coherence,
     totals: { total, onToken, detached, close, off, mixed },
     styleTokenCount: bundle.tokens.length,
+    systemFamilies: [...bundle.allowedFamilies].sort(),
     driftGroups,
   };
 }

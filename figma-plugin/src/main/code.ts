@@ -165,12 +165,62 @@ async function applyStyle(styleId: string, nodeIds: string[]): Promise<void> {
   post({ type: 'apply-style-done', fixed, failed });
 }
 
+// ---- type fix: swap only the font family -----------------------------------
+
+async function replaceFont(family: string, nodeIds: string[]): Promise<void> {
+  // Which weights/styles does the target family actually ship?
+  const available = await figma.listAvailableFontsAsync();
+  const stylesForFamily = new Set(
+    available.filter((f) => f.fontName.family === family).map((f) => f.fontName.style),
+  );
+  if (stylesForFamily.size === 0) {
+    post({ type: 'replace-font-done', fixed: 0, failed: nodeIds.length, fallbacks: 0 });
+    return;
+  }
+  // Keep the same weight name if the new family has it; else fall back.
+  const pickStyle = (desired: string): { style: string; fellBack: boolean } => {
+    if (stylesForFamily.has(desired)) return { style: desired, fellBack: false };
+    if (stylesForFamily.has('Regular')) return { style: 'Regular', fellBack: true };
+    return { style: [...stylesForFamily][0], fellBack: true };
+  };
+
+  let fixed = 0;
+  let failed = 0;
+  let fallbacks = 0;
+  for (const id of [...new Set(nodeIds)]) {
+    const node = await figma.getNodeByIdAsync(id);
+    if (!node || node.type !== 'TEXT') {
+      failed += 1;
+      continue;
+    }
+    try {
+      const segments = node.getStyledTextSegments(['fontName']);
+      // Load the node's current fonts so we can mutate its ranges.
+      for (const seg of segments) await figma.loadFontAsync(seg.fontName);
+      let nodeFellBack = false;
+      for (const seg of segments) {
+        const { style, fellBack } = pickStyle(seg.fontName.style);
+        const target: FontName = { family, style };
+        await figma.loadFontAsync(target);
+        node.setRangeFontName(seg.start, seg.end, target); // size/line-height/spacing untouched
+        if (fellBack) nodeFellBack = true;
+      }
+      if (nodeFellBack) fallbacks += 1;
+      fixed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  post({ type: 'replace-font-done', fixed, failed, fallbacks });
+}
+
 figma.ui.onmessage = async (message: UIMessage): Promise<void> => {
   try {
     if (message.type === 'run-audit') await runAudit();
     else if (message.type === 'locate') await locate(message.nodeIds);
     else if (message.type === 'rebind') await rebind(message.variableId, message.refs);
     else if (message.type === 'apply-style') await applyStyle(message.styleId, message.nodeIds);
+    else if (message.type === 'replace-font') await replaceFont(message.family, message.nodeIds);
   } catch (error) {
     post({ type: 'audit-error', error: error instanceof Error ? error.message : String(error) });
   }
