@@ -1,5 +1,6 @@
 {
   "name": "Token Drift",
+  "id": "1644618130362136871",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
