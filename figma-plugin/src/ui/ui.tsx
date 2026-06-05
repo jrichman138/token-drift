@@ -227,6 +227,10 @@ function App() {
         </p>
       )}
       {toast && <p className="toast">{toast}</p>}
+      {/* Always-mounted live region so toast updates are announced to screen readers. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {toast}
+      </p>
 
       {data && (
         <>
@@ -410,23 +414,43 @@ function PickerMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const close = (returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close(true);
+    };
     window.addEventListener('mousedown', onDoc);
-    return () => window.removeEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    // Move focus into the menu so keyboard users land on the first option.
+    listRef.current?.querySelector('button')?.focus();
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [open]);
   if (options.length === 0) return null;
 
+  // A plain button menu (no listbox role): every option is a real <button>, so it's
+  // fully keyboard-operable via Tab/Enter; Escape closes and returns focus.
   return (
     <span className="tokenmenu" ref={ref}>
       <button
+        ref={triggerRef}
         className="tokenmenu__trigger"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
+        aria-haspopup="menu"
         aria-expanded={open}
       >
         {options[0].swatch && (
@@ -436,12 +460,11 @@ function PickerMenu({
         <span className="tokenmenu__caret" aria-hidden>▾</span>
       </button>
       {open && (
-        <ul className="tokenmenu__list" role="listbox">
+        <ul className="tokenmenu__list" ref={listRef}>
           {options.map((o) => (
             <li key={o.id}>
               <button
                 className="tokenmenu__item"
-                role="option"
                 onClick={() => {
                   setOpen(false);
                   onApply(o.id);
@@ -566,7 +589,12 @@ function FontSwap({
   }
   return (
     <span className="fontswap">
-      <select value={family} onChange={(e) => setFamily(e.target.value)} disabled={disabled}>
+      <select
+        aria-label="Replacement font family"
+        value={family}
+        onChange={(e) => setFamily(e.target.value)}
+        disabled={disabled}
+      >
         {families.map((f) => (
           <option key={f} value={f}>
             {f}
@@ -853,7 +881,7 @@ function ScaleSection({
   return (
     <section className="section">
       <div className="shead">
-        <span className="shead__title">{title}</span>
+        <h2 className="shead__title">{title}</h2>
         <span className="shead__drift">
           {result.distinctCount} value{result.distinctCount === 1 ? '' : 's'} · {result.outliers.length} outlier
           {result.outliers.length === 1 ? '' : 's'}
@@ -917,7 +945,7 @@ function ScaleSection({
 function CollapsedRow({ title, note, good }: { title: string; note: string; good?: boolean }) {
   return (
     <div className={`crow${good ? ' crow--good' : ''}`}>
-      <span className="crow__title">{title}</span>
+      <h2 className="crow__title">{title}</h2>
       <span className="crow__note">
         {good ? '✓ ' : ''}
         {note}

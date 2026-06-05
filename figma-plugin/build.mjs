@@ -37,12 +37,28 @@ function htmlTemplate(js) {
     --border: var(--figma-color-border, #e6e6e6);
     --accent: var(--figma-color-bg-brand, #1b607f);
     --accent-text: var(--figma-color-text-onbrand, #ffffff);
-    --good: #1f9d55; --ok: #7ba843; --warn: #d99a2b; --bad: #d1495b;
+    /* Theme-aware status colors (used for score text + drift borders). Figma's
+       semantic tokens are accessible in both themes; fallbacks are dark enough to
+       pass 4.5:1 on a light background outside Figma. */
+    --good: var(--figma-color-text-success, #157a3a);
+    --ok: var(--figma-color-text-success, #157a3a);
+    --warn: var(--figma-color-text-warning, #8a5a00);
+    --bad: var(--figma-color-text-danger, #9a1626);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: Inter, -apple-system, system-ui, sans-serif;
     font-size: 12px; color: var(--text); background: var(--bg);
+  }
+  /* Visible keyboard focus indicator on every interactive control. */
+  button:focus-visible, select:focus-visible, [role="tab"]:focus-visible {
+    outline: 2px solid var(--figma-color-border-selected, #0d99ff);
+    outline-offset: 1px;
+  }
+  /* Visually hidden but available to screen readers (for the live region). */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
   .app { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .head h1 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -104,12 +120,12 @@ function htmlTemplate(js) {
     display: flex; align-items: baseline; gap: 8px; padding: 6px 2px;
     border-top: 1px solid var(--border);
   }
-  .crow__title { font-size: 13px; font-weight: 600; }
+  .crow__title { font-size: 13px; font-weight: 600; margin: 0; }
   .crow__note { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
   .crow--good .crow__note { color: var(--good); }
   .section { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
   .shead { display: flex; align-items: baseline; gap: 8px; }
-  .shead__title { font-size: 13px; font-weight: 600; }
+  .shead__title { font-size: 13px; font-weight: 600; margin: 0; }
   .shead__score { font-size: 13px; font-weight: 700; }
   .shead--good .shead__score { color: var(--good); }
   .shead--ok .shead__score { color: var(--ok); }
@@ -184,7 +200,7 @@ function htmlTemplate(js) {
   .vactions { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }
   .vactions button {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
-    padding: 5px 10px; cursor: pointer; font-size: 11px; font-weight: 600;
+    padding: 6px 10px; min-height: 26px; cursor: pointer; font-size: 11px; font-weight: 600;
     background: var(--bg); color: var(--text); white-space: nowrap; flex: 0 0 auto;
   }
   .vactions button:hover { background: var(--bg); border-color: var(--accent); }
@@ -198,8 +214,8 @@ function htmlTemplate(js) {
   .tokenmenu { position: relative; display: inline-flex; flex: 0 0 auto; }
   .tokenmenu__trigger {
     display: inline-flex; align-items: center; gap: 6px; appearance: none; border: 0;
-    border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 11px; font-weight: 600;
-    background: var(--accent); color: var(--accent-text); white-space: nowrap; flex: 0 0 auto;
+    border-radius: 6px; padding: 6px 10px; min-height: 26px; cursor: pointer; font-size: 11px;
+    font-weight: 600; background: var(--accent); color: var(--accent-text); white-space: nowrap; flex: 0 0 auto;
   }
   .tokenmenu__trigger:disabled { opacity: 0.6; cursor: default; }
   .tokenmenu__caret { font-size: 9px; opacity: 0.85; }
