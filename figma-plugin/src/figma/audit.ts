@@ -33,10 +33,19 @@ export interface DriftGroup {
   deltaLabel?: string; // e.g. "ΔE 1.4"
 }
 
+// A color token the user can bind a paint to (variable-backed only — paint
+// styles can't be bound). Powers the "pick a token" override on near/off rows.
+export interface BindableToken {
+  name: string;
+  value: string; // hex
+  variableId: string;
+}
+
 export interface ColorAuditResult {
   coherence: number; // bound / total
   totals: { total: number; bound: number; detached: number; near: number; orphan: number };
   driftGroups: DriftGroup[]; // unbound paints, grouped by value, sorted by fixability
+  bindableTokens: BindableToken[]; // every variable-backed color token, for the picker
 }
 
 const MAX_SAMPLE_SELECTORS = 6;
@@ -102,7 +111,23 @@ export function auditColors(
       a.value.localeCompare(b.value),
   );
 
+  // Every variable-backed color token, for the "pick a token" override.
+  const seenVar = new Set<string>();
+  const bindableTokens: BindableToken[] = [];
+  for (const t of tokens.color) {
+    const variableId = variableIdByToken.get(tokenKey(t.name, t.value));
+    if (variableId && !seenVar.has(variableId)) {
+      seenVar.add(variableId);
+      bindableTokens.push({ name: t.name, value: String(t.value), variableId });
+    }
+  }
+
   const total = observations.length;
   const coherence = total === 0 ? 1 : bound / total;
-  return { coherence, totals: { total, bound, detached, near, orphan }, driftGroups };
+  return {
+    coherence,
+    totals: { total, bound, detached, near, orphan },
+    driftGroups,
+    bindableTokens,
+  };
 }

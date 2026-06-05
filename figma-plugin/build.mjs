@@ -177,6 +177,35 @@ function htmlTemplate(js) {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
     padding: 4px 6px; background: var(--bg); color: var(--text); font-size: 11px; max-width: 110px;
   }
+  .tokenmenu { position: relative; display: inline-flex; }
+  .tokenmenu__trigger {
+    display: inline-flex; align-items: center; gap: 6px; appearance: none; border: 0;
+    border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 11px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  .tokenmenu__trigger:disabled { opacity: 0.6; cursor: default; }
+  .tokenmenu__caret { font-size: 9px; opacity: 0.85; }
+  .tokenmenu__chip {
+    width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  }
+  .tokenmenu__list {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; margin: 0; padding: 4px;
+    list-style: none; min-width: 170px; max-height: 230px; overflow: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.20);
+  }
+  .tokenmenu__item {
+    display: flex; align-items: center; gap: 8px; width: 100%; appearance: none; border: 0;
+    background: transparent; border-radius: 6px; padding: 6px 8px; cursor: pointer;
+    text-align: left; color: var(--text); font-size: 11px;
+  }
+  .tokenmenu__item:hover { background: var(--bg-secondary); }
+  .tokenmenu__name { font-weight: 600; }
+  .tokenmenu__hex {
+    margin-left: auto; color: var(--text-secondary);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
   .violations__note { margin: 8px 0 0; color: var(--text-secondary); line-height: 1.4; font-size: 11px; }
   .toast {
     margin: 0; padding: 8px 10px; border-radius: 6px; line-height: 1.4;

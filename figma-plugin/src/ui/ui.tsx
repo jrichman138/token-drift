@@ -1,6 +1,6 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ColorAuditResult, DriftGroup } from '../figma/audit';
+import type { BindableToken, ColorAuditResult, DriftGroup } from '../figma/audit';
 import type { DimAuditResult, DimDriftGroup } from '../figma/dimension';
 import type { EffectAuditResult, EffectDriftGroup } from '../figma/effect';
 import type { ScaleOutlier, ScaleResult, ScaleResults } from '../figma/scale';
@@ -157,6 +157,12 @@ function App() {
     send({ type: 'rebind', variableId: g.suggestionVariableId, refs: g.refs });
   }
 
+  // Bind a near/off color group to a user-chosen token (from the picker).
+  function pickColorToken(g: DriftGroup, variableId: string) {
+    setWorking(colorKey(g));
+    send({ type: 'rebind', variableId, refs: g.refs });
+  }
+
   function useTextStyle(g: TypeDriftGroup) {
     if (!g.styleId) return;
     setWorking(g.key);
@@ -278,6 +284,7 @@ function App() {
                 working={working}
                 onLocate={locate}
                 onUse={useColorToken}
+                onPick={pickColorToken}
               />
               <TypeSection
                 result={data.typography}
@@ -343,18 +350,102 @@ function SectionHead({ title, coherence, drift }: { title: string; coherence: nu
   );
 }
 
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// Order tokens by simple RGB closeness to a value — just for the dropdown's
+// default + ordering (the precise ΔE classification already happened in the
+// sandbox); a rough sort is plenty for a picker.
+function sortTokensByCloseness(tokens: BindableToken[], hex: string): BindableToken[] {
+  const target = hexToRgb(hex);
+  if (!target) return tokens;
+  const dist = (t: BindableToken) => {
+    const c = hexToRgb(t.value);
+    if (!c) return Infinity;
+    return (c[0] - target[0]) ** 2 + (c[1] - target[1]) ** 2 + (c[2] - target[2]) ** 2;
+  };
+  return [...tokens].sort((a, b) => dist(a) - dist(b));
+}
+
+// A button + swatch menu for picking which token a near/off value binds to.
+// Each option shows a color chip, name, and hex; the trigger carries the closest
+// token's chip so its purpose reads at a glance. Picking a row applies it.
+function TokenMenu({
+  tokens,
+  disabled,
+  onApply,
+}: {
+  tokens: BindableToken[]; // closest-first
+  disabled: boolean;
+  onApply: (variableId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  if (tokens.length === 0) return null;
+
+  return (
+    <span className="tokenmenu" ref={ref}>
+      <button
+        className="tokenmenu__trigger"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="tokenmenu__chip" style={{ background: tokens[0].value }} aria-hidden />
+        <span>{disabled ? 'Applying…' : 'Use token'}</span>
+        <span className="tokenmenu__caret" aria-hidden>▾</span>
+      </button>
+      {open && (
+        <ul className="tokenmenu__list" role="listbox">
+          {tokens.map((t) => (
+            <li key={t.variableId}>
+              <button
+                className="tokenmenu__item"
+                role="option"
+                onClick={() => {
+                  setOpen(false);
+                  onApply(t.variableId);
+                }}
+              >
+                <span className="tokenmenu__chip" style={{ background: t.value }} aria-hidden />
+                <span className="tokenmenu__name">{t.name}</span>
+                <span className="tokenmenu__hex">{t.value}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </span>
+  );
+}
+
 function ColorSection({
   result,
   tokenCount,
   working,
   onLocate,
   onUse,
+  onPick,
 }: {
   result: ColorAuditResult;
   tokenCount: number;
   working: string | null;
   onLocate: (ids: string[]) => void;
   onUse: (g: DriftGroup) => void;
+  onPick: (g: DriftGroup, variableId: string) => void;
 }) {
   const t = result.totals;
   if (tokenCount === 0) return <CollapsedRow title="Color" note="no color tokens" />;
@@ -377,7 +468,9 @@ function ColorSection({
       ) : (
         <ul className="vlist">
           {result.driftGroups.map((g) => {
-            const canUse = !!g.suggestionVariableId && g.status !== 'orphan';
+            const oneClick = g.status === 'detached' && g.suggestionVariableId;
+            const showPicker =
+              (g.status === 'near' || g.status === 'orphan') && result.bindableTokens.length > 0;
             const isWorking = working === colorKey(g);
             return (
               <li key={colorKey(g)} className={`violation v--${g.status}`}>
@@ -389,8 +482,8 @@ function ColorSection({
                 </div>
                 <div className="vmeta">
                   <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
-                    {canUse
-                      ? g.deltaLabel ?? 'exact match'
+                    {g.status === 'detached'
+                      ? 'exact match'
                       : g.suggestionName
                         ? `closest: ${g.suggestionName}${g.deltaLabel ? ` (${g.deltaLabel})` : ''}`
                         : 'no nearby token'}
@@ -399,10 +492,17 @@ function ColorSection({
                     <button className="locate" onClick={() => onLocate([...new Set(g.refs.map((r) => r.nodeId))])}>
                       Locate
                     </button>
-                    {canUse && (
+                    {oneClick && (
                       <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
                         {isWorking ? 'Applying…' : `Use ${g.suggestionName}`}
                       </button>
+                    )}
+                    {showPicker && (
+                      <TokenMenu
+                        tokens={sortTokensByCloseness(result.bindableTokens, g.value)}
+                        disabled={isWorking}
+                        onApply={(variableId) => onPick(g, variableId)}
+                      />
                     )}
                   </span>
                 </div>
