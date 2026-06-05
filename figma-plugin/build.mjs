@@ -154,20 +154,38 @@ function htmlTemplate(js) {
     margin-left: auto; font-size: 10px; font-weight: 600; padding: 2px 7px;
     border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em;
   }
-  .chip--detached { background: rgba(217, 154, 43, 0.16); color: var(--warn); }
-  .chip--near { background: rgba(123, 168, 67, 0.16); color: var(--ok); }
-  .chip--orphan { background: rgba(209, 73, 91, 0.16); color: var(--bad); }
-  .chip--close { background: rgba(123, 168, 67, 0.16); color: var(--ok); }
-  .chip--off { background: rgba(209, 73, 91, 0.16); color: var(--bad); }
-  .chip--mixed { background: rgba(120, 120, 120, 0.16); color: var(--text-secondary); }
-  .vmeta { display: flex; align-items: center; gap: 8px; }
-  .vsuggest { color: var(--text-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  /* Status chips use Figma's semantic theme tokens, which are tuned for accessible
+     contrast in BOTH light and dark themes; the fallbacks (for non-Figma contexts)
+     pair a light tint with dark text so they pass on a light background. */
+  .chip--detached {
+    background: var(--figma-color-bg-warning-tertiary, #fbe6c8);
+    color: var(--figma-color-text-warning, #7a5800);
+  }
+  .chip--near, .chip--close {
+    background: var(--figma-color-bg-success-tertiary, #d8ecd0);
+    color: var(--figma-color-text-success, #256025);
+  }
+  .chip--orphan, .chip--off {
+    background: var(--figma-color-bg-danger-tertiary, #f6d6da);
+    color: var(--figma-color-text-danger, #9a1626);
+  }
+  .chip--mixed {
+    background: var(--figma-color-bg-tertiary, #e3e3e3);
+    color: var(--figma-color-text-secondary, #4a4a4a);
+  }
+  /* Let the action group wrap to its own line when tight, but never let a button's
+     own text wrap (no "Use\ntoken"). The suggestion text shrinks/truncates first. */
+  .vmeta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .vsuggest {
+    color: var(--text-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .vsuggest--none { font-style: italic; font-family: inherit; }
-  .vactions { display: flex; gap: 6px; margin-left: auto; }
+  .vactions { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }
   .vactions button {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
     padding: 5px 10px; cursor: pointer; font-size: 11px; font-weight: 600;
-    background: var(--bg); color: var(--text);
+    background: var(--bg); color: var(--text); white-space: nowrap; flex: 0 0 auto;
   }
   .vactions button:hover { background: var(--bg); border-color: var(--accent); }
   .vactions .bind { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -177,11 +195,11 @@ function htmlTemplate(js) {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
     padding: 4px 6px; background: var(--bg); color: var(--text); font-size: 11px; max-width: 110px;
   }
-  .tokenmenu { position: relative; display: inline-flex; }
+  .tokenmenu { position: relative; display: inline-flex; flex: 0 0 auto; }
   .tokenmenu__trigger {
     display: inline-flex; align-items: center; gap: 6px; appearance: none; border: 0;
     border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 11px; font-weight: 600;
-    background: var(--accent); color: var(--accent-text);
+    background: var(--accent); color: var(--accent-text); white-space: nowrap; flex: 0 0 auto;
   }
   .tokenmenu__trigger:disabled { opacity: 0.6; cursor: default; }
   .tokenmenu__caret { font-size: 9px; opacity: 0.85; }
