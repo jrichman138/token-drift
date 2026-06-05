@@ -163,6 +163,20 @@ function App() {
     send({ type: 'rebind', variableId, refs: g.refs });
   }
 
+  // Off-system drifts → user-chosen token/style (from the picker), per category.
+  function pickDimension(g: DimDriftGroup, variableId: string) {
+    setWorking(g.key);
+    send({ type: 'bind-dimension', variableId, refs: g.refs });
+  }
+  function pickTextStyle(g: TypeDriftGroup, styleId: string) {
+    setWorking(g.key);
+    send({ type: 'apply-style', styleId, nodeIds: g.nodeIds });
+  }
+  function pickEffectStyle(g: EffectDriftGroup, styleId: string) {
+    setWorking(g.key);
+    send({ type: 'apply-effect-style', styleId, nodeIds: g.nodeIds });
+  }
+
   function useTextStyle(g: TypeDriftGroup) {
     if (!g.styleId) return;
     setWorking(g.key);
@@ -292,11 +306,12 @@ function App() {
                 onLocate={locate}
                 onUse={useTextStyle}
                 onReplaceFont={replaceFont}
+                onPick={pickTextStyle}
               />
-              <DimSection title="Spacing" result={data.spacing} working={working} onLocate={locate} onUse={bindDimension} />
-              <DimSection title="Radius" result={data.radius} working={working} onLocate={locate} onUse={bindDimension} />
-              <DimSection title="Stroke" result={data.stroke} working={working} onLocate={locate} onUse={bindDimension} />
-              <ElevationSection result={data.elevation} working={working} onLocate={locate} onUse={applyEffectStyle} />
+              <DimSection title="Spacing" result={data.spacing} working={working} onLocate={locate} onUse={bindDimension} onPick={pickDimension} />
+              <DimSection title="Radius" result={data.radius} working={working} onLocate={locate} onUse={bindDimension} onPick={pickDimension} />
+              <DimSection title="Stroke" result={data.stroke} working={working} onLocate={locate} onUse={bindDimension} onPick={pickDimension} />
+              <ElevationSection result={data.elevation} working={working} onLocate={locate} onUse={applyEffectStyle} onPick={pickEffectStyle} />
             </>
           )}
 
@@ -371,17 +386,27 @@ function sortTokensByCloseness(tokens: BindableToken[], hex: string): BindableTo
   return [...tokens].sort((a, b) => dist(a) - dist(b));
 }
 
-// A button + swatch menu for picking which token a near/off value binds to.
-// Each option shows a color chip, name, and hex; the trigger carries the closest
-// token's chip so its purpose reads at a glance. Picking a row applies it.
-function TokenMenu({
-  tokens,
+// One row in a picker menu. `swatch` (a CSS color) is optional — color tokens
+// show a chip, dimension/style tokens just show name + meta.
+interface PickOption {
+  id: string;
+  name: string;
+  meta?: string; // hex, "16px", "Inter 14", …
+  swatch?: string;
+}
+
+// A button + menu for picking which token/style a near/off value should adopt.
+// Each option shows an optional chip, a name, and meta; picking a row applies it.
+function PickerMenu({
+  options,
+  label = 'Use token',
   disabled,
   onApply,
 }: {
-  tokens: BindableToken[]; // closest-first
+  options: PickOption[]; // best match first
+  label?: string;
   disabled: boolean;
-  onApply: (variableId: string) => void;
+  onApply: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -393,7 +418,7 @@ function TokenMenu({
     window.addEventListener('mousedown', onDoc);
     return () => window.removeEventListener('mousedown', onDoc);
   }, [open]);
-  if (tokens.length === 0) return null;
+  if (options.length === 0) return null;
 
   return (
     <span className="tokenmenu" ref={ref}>
@@ -404,25 +429,27 @@ function TokenMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="tokenmenu__chip" style={{ background: tokens[0].value }} aria-hidden />
-        <span>{disabled ? 'Applying…' : 'Use token'}</span>
+        {options[0].swatch && (
+          <span className="tokenmenu__chip" style={{ background: options[0].swatch }} aria-hidden />
+        )}
+        <span>{disabled ? 'Applying…' : label}</span>
         <span className="tokenmenu__caret" aria-hidden>▾</span>
       </button>
       {open && (
         <ul className="tokenmenu__list" role="listbox">
-          {tokens.map((t) => (
-            <li key={t.variableId}>
+          {options.map((o) => (
+            <li key={o.id}>
               <button
                 className="tokenmenu__item"
                 role="option"
                 onClick={() => {
                   setOpen(false);
-                  onApply(t.variableId);
+                  onApply(o.id);
                 }}
               >
-                <span className="tokenmenu__chip" style={{ background: t.value }} aria-hidden />
-                <span className="tokenmenu__name">{t.name}</span>
-                <span className="tokenmenu__hex">{t.value}</span>
+                {o.swatch && <span className="tokenmenu__chip" style={{ background: o.swatch }} aria-hidden />}
+                <span className="tokenmenu__name">{o.name}</span>
+                {o.meta && <span className="tokenmenu__hex">{o.meta}</span>}
               </button>
             </li>
           ))}
@@ -498,8 +525,13 @@ function ColorSection({
                       </button>
                     )}
                     {showPicker && (
-                      <TokenMenu
-                        tokens={sortTokensByCloseness(result.bindableTokens, g.value)}
+                      <PickerMenu
+                        options={sortTokensByCloseness(result.bindableTokens, g.value).map((t) => ({
+                          id: t.variableId,
+                          name: t.name,
+                          meta: t.value,
+                          swatch: t.value,
+                        }))}
                         disabled={isWorking}
                         onApply={(variableId) => onPick(g, variableId)}
                       />
@@ -554,12 +586,14 @@ function TypeSection({
   onLocate,
   onUse,
   onReplaceFont,
+  onPick,
 }: {
   result: TypeAuditResult;
   working: string | null;
   onLocate: (ids: string[]) => void;
   onUse: (g: TypeDriftGroup) => void;
   onReplaceFont: (g: TypeDriftGroup, family: string) => void;
+  onPick: (g: TypeDriftGroup, styleId: string) => void;
 }) {
   const t = result.totals;
   if (result.styleTokenCount === 0) return <CollapsedRow title="Typography" note="no text styles" />;
@@ -582,7 +616,8 @@ function TypeSection({
       ) : (
         <ul className="vlist">
           {result.driftGroups.map((g) => {
-            const canUse = !!g.styleId;
+            const canUse = !!g.styleId; // detached / close → one-click apply the matched style
+            const showPicker = g.status === 'off' && result.styleTokens.length > 0;
             const isWorking = working === g.key;
             return (
               <li key={g.key} className={`violation v--${g.status}`}>
@@ -609,6 +644,18 @@ function TypeSection({
                         onApply={(family) => onReplaceFont(g, family)}
                       />
                     )}
+                    {showPicker && (
+                      <PickerMenu
+                        label="Use style"
+                        options={result.styleTokens.map((s) => ({
+                          id: s.styleId,
+                          name: s.name,
+                          meta: `${s.family} ${s.fontSize}`,
+                        }))}
+                        disabled={isWorking}
+                        onApply={(styleId) => onPick(g, styleId)}
+                      />
+                    )}
                   </span>
                 </div>
               </li>
@@ -626,12 +673,14 @@ function DimSection({
   working,
   onLocate,
   onUse,
+  onPick,
 }: {
   title: string;
   result: DimAuditResult;
   working: string | null;
   onLocate: (ids: string[]) => void;
   onUse: (g: DimDriftGroup) => void;
+  onPick: (g: DimDriftGroup, variableId: string) => void;
 }) {
   const t = result.totals;
   const lower = title.toLowerCase();
@@ -654,7 +703,8 @@ function DimSection({
       ) : (
         <ul className="vlist">
           {result.driftGroups.map((g) => {
-            const canUse = !!g.suggestionVariableId; // detached only
+            const oneClick = g.status === 'detached' && g.suggestionVariableId;
+            const showPicker = g.status === 'off' && result.bindableTokens.length > 0;
             const isWorking = working === g.key;
             const variant = g.status === 'detached' ? 'detached' : 'orphan';
             return (
@@ -668,7 +718,7 @@ function DimSection({
                 </div>
                 <div className="vmeta">
                   <span className={`vsuggest${g.suggestionName ? '' : ' vsuggest--none'}`}>
-                    {canUse
+                    {g.status === 'detached'
                       ? 'exact match'
                       : g.suggestionName
                         ? `closest: ${g.suggestionName} (${g.suggestionValue}px${g.deltaLabel ? `, ${g.deltaLabel}` : ''})`
@@ -681,10 +731,19 @@ function DimSection({
                     >
                       Locate
                     </button>
-                    {canUse && (
+                    {oneClick && (
                       <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
                         {isWorking ? 'Applying…' : `Use ${g.suggestionName}`}
                       </button>
+                    )}
+                    {showPicker && (
+                      <PickerMenu
+                        options={[...result.bindableTokens]
+                          .sort((a, b) => Math.abs(a.value - g.value) - Math.abs(b.value - g.value))
+                          .map((tk) => ({ id: tk.variableId, name: tk.name, meta: `${tk.value}px` }))}
+                        disabled={isWorking}
+                        onApply={(variableId) => onPick(g, variableId)}
+                      />
                     )}
                   </span>
                 </div>
@@ -702,11 +761,13 @@ function ElevationSection({
   working,
   onLocate,
   onUse,
+  onPick,
 }: {
   result: EffectAuditResult;
   working: string | null;
   onLocate: (ids: string[]) => void;
   onUse: (g: EffectDriftGroup) => void;
+  onPick: (g: EffectDriftGroup, styleId: string) => void;
 }) {
   const t = result.totals;
   if (result.styleTokenCount === 0) return <CollapsedRow title="Elevation" note="no effect styles" />;
@@ -728,7 +789,8 @@ function ElevationSection({
       ) : (
         <ul className="vlist">
           {result.driftGroups.map((g) => {
-            const canUse = !!g.styleId;
+            const oneClick = g.status === 'detached' && g.styleId;
+            const showPicker = g.status === 'off' && result.styleTokens.length > 0;
             const isWorking = working === g.key;
             const variant = g.status === 'detached' ? 'detached' : 'orphan';
             return (
@@ -748,10 +810,18 @@ function ElevationSection({
                     <button className="locate" onClick={() => onLocate(g.nodeIds)}>
                       Locate
                     </button>
-                    {canUse && (
+                    {oneClick && (
                       <button className="bind" onClick={() => onUse(g)} disabled={isWorking}>
                         {isWorking ? 'Applying…' : `Use ${g.styleName}`}
                       </button>
+                    )}
+                    {showPicker && (
+                      <PickerMenu
+                        label="Use style"
+                        options={result.styleTokens.map((s) => ({ id: s.styleId, name: s.name }))}
+                        disabled={isWorking}
+                        onApply={(styleId) => onPick(g, styleId)}
+                      />
                     )}
                   </span>
                 </div>

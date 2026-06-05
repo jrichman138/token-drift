@@ -72,11 +72,19 @@ export interface TypeDriftGroup {
   offFont?: boolean; // off-system font (family not in any text style) — swappable
 }
 
+export interface TypeStyleOption {
+  styleId: string;
+  name: string;
+  family: string;
+  fontSize: number;
+}
+
 export interface TypeAuditResult {
   coherence: number; // on-token ÷ total text nodes
   totals: { total: number; onToken: number; detached: number; close: number; off: number; mixed: number };
   styleTokenCount: number;
   systemFamilies: string[]; // font families the design system uses (swap targets)
+  styleTokens: TypeStyleOption[]; // every text style, for the "apply a style" menu
   driftGroups: TypeDriftGroup[];
 }
 
@@ -316,6 +324,9 @@ export function auditTypography(observations: TextObservation[], bundle: TextTok
     totals: { total, onToken, detached, close, off, mixed },
     styleTokenCount: bundle.tokens.length,
     systemFamilies: [...bundle.allowedFamilies].sort(),
+    styleTokens: bundle.tokens
+      .map((t) => ({ styleId: t.styleId, name: t.name, family: t.family, fontSize: t.fontSize }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     driftGroups,
   };
 }

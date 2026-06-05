@@ -46,10 +46,16 @@ export interface EffectDriftGroup {
   styleName?: string;
 }
 
+export interface EffectStyleOption {
+  styleId: string;
+  name: string;
+}
+
 export interface EffectAuditResult {
   coherence: number; // on-token ÷ nodes-with-effects
   totals: { total: number; onToken: number; detached: number; off: number };
   styleTokenCount: number;
+  styleTokens: EffectStyleOption[]; // every effect style, for the "apply a style" menu
   driftGroups: EffectDriftGroup[];
 }
 
@@ -210,6 +216,9 @@ export function auditEffects(observations: EffectObservation[], bundle: EffectTo
     coherence: total === 0 ? 1 : onToken / total,
     totals: { total, onToken, detached, off },
     styleTokenCount: bundle.tokens.length,
+    styleTokens: bundle.tokens
+      .map((t) => ({ styleId: t.styleId, name: t.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     driftGroups,
   };
 }

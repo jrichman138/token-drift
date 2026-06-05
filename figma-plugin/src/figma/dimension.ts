@@ -69,6 +69,7 @@ export interface DimAuditResult {
   totals: { total: number; bound: number; detached: number; off: number };
   tokenCount: number;
   driftGroups: DimDriftGroup[];
+  bindableTokens: DimToken[]; // this category's variables, for the "pick a token" menu
 }
 
 const MAX_NODES = 50_000;
@@ -297,6 +298,7 @@ function auditOne(category: DimCategory, observations: DimObservation[], tokens:
     totals: { total, bound, detached, off },
     tokenCount: tokens.length,
     driftGroups,
+    bindableTokens: tokens,
   };
 }
 
